@@ -1,5 +1,7 @@
 # YZE Combat: Permission Fix + Action Widget
 
+Version 1.2.1
+
 Target environment:
 
 - Foundry VTT 13.351
@@ -14,6 +16,18 @@ Target environment:
 2. Non-GM combat tracker renders no longer run YZE Combat's automatic group
    leader repair. That maintenance remains GM-only, preventing repeated
    permission errors on player clients.
+
+The GM authorizes the request using the sender ID supplied by Foundry's server
+as the second module-socket callback argument. The claimed `requesterId` must
+match that sender. Player replies must likewise come from the GM selected for
+the pending request and match its combat. Missing sender metadata is rejected.
+This transport was verified against Foundry 13.351's `registerCustomSocket` and
+`handleCustomSocket`; no server modification or Quick Access dependency is needed.
+
+Only one delegated round advance per combat can run on the responsible GM at
+a time. The guard releases after success or failure, and the original YZE Combat
+`nextRound` still handles history, initiative and action resets. It does not lock
+manual GM actions or provide a transaction across different GM clients.
 
 ## Action widget
 
@@ -34,6 +48,30 @@ YZE Combat's **Slow & Fast Actions** mode is enabled.
 
 The widget does not require the Combat Tracker to be open.
 
+## Combat reference
+
+Players can expand **Памятка: дистанции и движение** below the action buttons.
+It contains the table's supplied AL/N/S/L/D distances, escape/shooting/stealth
+modifiers, open/closed-space escape modifiers and movement conversions in both
+directions. Shooting at Arms Length retains the conscious-opponent condition.
+The supplied overlapping Long/Distant ranges and cell/meter values are preserved.
+
+The reference is closed by default, scrolls inside the widget, supports keyboard
+navigation and remembers its disclosure state per client. Opening it keeps the
+widget inside the screen. It is informational and does not modify rolls.
+
+## Optional Quick Access integration
+
+Quick Access **1.7.27+**, with equipment API version 1, supplies the foundation
+for future slot/item and hand controls. The widget exposes a public bridge for
+reading current slots/held items and issuing validated equipment commands.
+Quick Access owns that state; no private files or duplicate storage are used.
+See [INTEGRATION_API.md](INTEGRATION_API.md) for methods and events.
+
+The equipment list/buttons will be added in a later release. The current action
+buttons, permission fixes and reference work without Quick Access or with older
+versions. Neither module requires the other.
+
 ## Installation
 
 Extract the `yze-combat-permission-fix` folder into `Data/modules/`, restart
@@ -52,6 +90,11 @@ itself on any other YZE Combat version instead of guessing against changed code.
 5. Drag the widget, reload the browser, and confirm the position persists.
 6. Put the player's token last in initiative and end the turn. The combat should
    advance to the next round without a permission error.
+7. Expand the reference near the screen edge, scroll through it and collapse it.
+   Reload and confirm that the last disclosure state persists.
+8. With and without Quick Access enabled, verify that the actions/reference work.
+   With Quick Access 1.7.27, `api.quickAccess.getState()` should follow the selected
+   owned combat token, including an unlinked token's synthetic Actor.
 
 Console diagnostic:
 
@@ -60,3 +103,15 @@ game.modules.get("yze-combat-permission-fix").api
 ```
 
 `applied` should be `true`.
+
+## Changelog
+
+### 1.2.1
+
+- Authenticate round requests and replies with Foundry's server-supplied sender
+  metadata instead of trusting socket payload identities.
+- Reject simultaneous delegated advances of the same combat before awaiting the
+  first write; always release the guard after failure.
+- Settle failed socket sends immediately so a retry is not blocked by a timer.
+- Correct the equipment example to select an eligible nonempty slot.
+- Add 9 behavioral permission/round-transition regressions (15 tests total).

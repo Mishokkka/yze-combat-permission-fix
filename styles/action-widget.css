@@ -1,0 +1,194 @@
+#yze-combat-permission-fix-action-widget.yze-action-widget {
+  position: fixed;
+  z-index: 101;
+  width: 278px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(20, 18, 16, 0.94);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.45);
+  color: var(--color-text-light-highlight, #f0f0e0);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#yze-combat-permission-fix-action-widget[hidden] {
+  display: none !important;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__handle {
+  height: 27px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  background: rgba(255, 255, 255, 0.055);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+  cursor: grab;
+  touch-action: none;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__handle.is-dragging {
+  cursor: grabbing;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__handle i {
+  opacity: 0.6;
+  flex: 0 0 auto;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 7px;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__action {
+  min-width: 0;
+  height: 54px;
+  margin: 0;
+  padding: 5px 7px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.075);
+  box-shadow: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background 90ms ease, border-color 90ms ease, opacity 90ms ease, transform 60ms ease;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__action:hover {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__action:active {
+  transform: translateY(1px);
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__action.is-spent {
+  opacity: 0.43;
+  background: rgba(0, 0, 0, 0.22);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__icon img {
+  width: 31px;
+  height: 31px;
+  object-fit: contain;
+  border: 0;
+  filter: none;
+}
+
+#yze-combat-permission-fix-action-widget .is-spent .yze-action-widget__icon img {
+  filter: grayscale(1);
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__label {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__state {
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+#yze-combat-permission-fix-action-widget .is-available .yze-action-widget__state {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference {
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference summary {
+  padding: 8px 9px;
+  cursor: pointer;
+  font-weight: 600;
+  color: inherit;
+}
+
+#yze-combat-permission-fix-action-widget :is(summary, button, [tabindex]):focus-visible {
+  outline: 2px solid #c9ab69;
+  outline-offset: -2px;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference-body {
+  max-height: min(420px, 55vh, calc(100vh - 140px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 10px 8px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference article + article {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference h4 {
+  margin: 0 0 3px;
+  border: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #e5c889;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference p {
+  margin: 3px 0;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1px 6px;
+  margin: 5px 0 0;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference :is(dt, dd) {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
