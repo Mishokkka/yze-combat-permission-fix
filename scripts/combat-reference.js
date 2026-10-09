@@ -4,12 +4,12 @@ export const COMBAT_REFERENCE_HTML = `
   <div class="yze-action-widget__reference-body" tabindex="0" aria-label="Памятка по бою">
     <article>
       <h4>Нулевая · Arms Length (AL)</h4>
-      <p>В непосредственной близости · 1 клетка · 0–1 м.</p>
+      <p>В непосредственной близости · 1 клетка · 0–2 м.</p>
       <dl><dt>Бегство</dt><dd>−2</dd><dt>Стрельба</dt><dd>−3, если противник в сознании</dd><dt>Скрытая атака</dt><dd>−2</dd></dl>
     </article>
     <article>
       <h4>Ближняя · Near (N)</h4>
-      <p>До нескольких метров · 2–3 клетки · &gt;1–6 м.</p>
+      <p>До нескольких метров · 2–3 клетки · 2–6 м.</p>
       <dl><dt>Бегство</dt><dd>−1</dd><dt>Стрельба</dt><dd>+0</dd><dt>Скрытая атака</dt><dd>−1</dd></dl>
     </article>
     <article>

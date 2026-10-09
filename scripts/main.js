@@ -1,5 +1,7 @@
 import { createCombatReference } from "./combat-reference.js";
 import { createQuickAccessBridge } from "./quick-access-bridge.js";
+import { createEquipmentOperations, supportsEquipmentControls, readEquipmentOperation } from "./equipment-operations.js";
+import { createEquipmentPanel } from "./equipment-panel.js";
 
 const MODULE_ID = "yze-combat-permission-fix";
 const TARGET_MODULE_ID = "yze-combat";
@@ -20,11 +22,12 @@ let originalNextRound = null;
 let patchApplied = false;
 let widgetRefreshQueued = false;
 let widgetMutationBusy = false;
+let equipmentOperations = null;
+const equipmentPanels = new WeakMap();
 
 const quickAccess = createQuickAccessBridge(
   () => {
-    const combatant = getWidgetCombatant();
-    return combatant?.actor ?? combatant?.token?.actor ?? null;
+    return getWidgetActor();
   },
   actor => Boolean(actor?.isOwner),
   (...args) => warn(...args)
@@ -381,10 +384,19 @@ function actorHasActionStatus(actor, statusId) {
   }
 
   return actor.effects?.some(effect => {
+    if (effect.disabled || effect.isSuppressed) return false;
     if (effect.statuses?.has?.(statusId)) return true;
     if (Array.isArray(effect.statuses) && effect.statuses.includes(statusId)) return true;
     return effect.statuses === statusId;
   }) ?? false;
+}
+
+function getWidgetActor() {
+  const combatant = getWidgetCombatant();
+  if (combatant) return combatant.actor ?? combatant.token?.actor ?? null;
+  if (game.combat?.started) return null;
+  const selected = (canvas?.tokens?.controlled ?? []).map(token => token.actor).find(actor => actor?.isOwner && actor.type === "character");
+  return selected ?? (game.user.character?.isOwner && game.user.character.type === "character" ? game.user.character : null);
 }
 
 function getStatusEffect(statusId) {
@@ -497,12 +509,17 @@ async function toggleActionFromWidget(statusId) {
   }
 
   const currentlySpent = actorHasActionStatus(actor, statusId);
+  if (equipmentOperations?.isBusy(actor.uuid)) return;
+  if (["pending", "undoing"].includes(readEquipmentOperation(actor)?.phase)) return;
   widgetMutationBusy = true;
 
   try {
     // YZE Combat itself represents a spent action with an Active Effect/status.
     // Use exactly that state, so the tracker and this widget stay synchronized.
-    await actor.toggleStatusEffect(effect.id, { active: !currentlySpent });
+    if (supportsEquipmentControls() && game.modules.get("fbl-quick-access")?.api.getActiveGM()) {
+      await equipmentOperations.request({ kind: "toggle", actorUuid: actor.uuid, statusId: effect.id,
+        expectedSpent: currentlySpent, combat: { id: game.combat.id, round: game.combat.round } });
+    } else await actor.toggleStatusEffect(effect.id, { active: !currentlySpent });
   }
   catch (error) {
     console.error(`${MODULE_ID} | Could not toggle ${statusId}`, error);
@@ -563,7 +580,18 @@ function createActionWidget() {
     )
   );
 
-  element.append(createCombatReference({
+  const body = document.createElement("div");
+  body.className = "yze-action-widget__body";
+  const panel = createEquipmentPanel({ operations: equipmentOperations, onLayout() {
+    if (!element.isConnected || element.hidden) return;
+    const rect = element.getBoundingClientRect();
+    const position = clampWidgetPosition(element, rect.left, rect.top);
+    element.style.left = `${position.left}px`;
+    element.style.top = `${position.top}px`;
+  } });
+  equipmentPanels.set(element, panel);
+  body.append(panel.element);
+  body.append(createCombatReference({
     open: game.settings.get(MODULE_ID, REFERENCE_OPEN_SETTING),
     onToggle(open) {
       game.settings.set(MODULE_ID, REFERENCE_OPEN_SETTING, open)
@@ -576,6 +604,7 @@ function createActionWidget() {
       });
     }
   }));
+  element.append(body);
 
   document.body.append(element);
   installWidgetDragging(element);
@@ -604,12 +633,11 @@ function refreshActionWidgetNow() {
 
   const element = createActionWidget();
   const combatant = getWidgetCombatant();
-  const actor = combatant?.actor ?? combatant?.token?.actor;
+  const actor = getWidgetActor();
   const shouldShow = Boolean(
     patchApplied &&
-    slowAndFastActionsEnabled() &&
-    game.combat?.started &&
-    combatant &&
+    ((slowAndFastActionsEnabled() && game.combat?.started && combatant) ||
+      (!game.combat?.started && supportsEquipmentControls())) &&
     actor
   );
 
@@ -627,12 +655,19 @@ function refreshActionWidgetNow() {
   element.style.top = `${position.top}px`;
 
   const name = element.querySelector(".yze-action-widget__name");
-  if (name) name.textContent = combatant.name ?? actor.name ?? "Действия";
+  if (name) name.textContent = combatant?.name ?? actor.name ?? "Действия";
+
+  element.querySelector(".yze-action-widget__actions").hidden = !game.combat?.started;
 
   updateActionButton(element, FAST_ACTION, actorHasActionStatus(actor, FAST_ACTION));
   updateActionButton(element, SLOW_ACTION, actorHasActionStatus(actor, SLOW_ACTION));
+  const equipment = quickAccess.getState();
+  equipmentPanels.get(element)?.update(actor, equipment, game.combat);
+  const operation = readEquipmentOperation(actor);
+  const disabled = widgetMutationBusy || equipmentOperations?.isBusy(actor.uuid) || ["pending", "undoing"].includes(operation?.phase);
+  for (const button of element.querySelectorAll(".yze-action-widget__action")) button.disabled = Boolean(disabled);
   Hooks.callAll("yzeCombatPermissionFix.widgetUpdated", {
-    element, combatant, actor, equipment: quickAccess.getState()
+    element, combatant, actor, equipment
   });
 }
 
@@ -660,8 +695,7 @@ function installActionWidgetHooks() {
 
   for (const hook of refreshHooks) Hooks.on(hook, refreshActionWidget);
   Hooks.on("fblQuickAccess.equipmentChanged", actor => {
-    const combatant = getWidgetCombatant();
-    const current = combatant?.actor ?? combatant?.token?.actor;
+    const current = getWidgetActor();
     if (current && actor?.uuid === current.uuid) refreshActionWidget();
   });
 
@@ -686,9 +720,13 @@ Hooks.once("init", () => {
   game.settings.register(MODULE_ID, REFERENCE_OPEN_SETTING, {
     scope: "client", config: false, type: Boolean, default: false,
   });
+  game.settings.register(MODULE_ID, "equipmentOpen", {
+    scope: "client", config: false, type: Boolean, default: true,
+  });
 });
 
 Hooks.once("ready", () => {
+  equipmentOperations = createEquipmentOperations();
   const yzeCombat = game.modules.get(TARGET_MODULE_ID);
   if (!yzeCombat?.active) {
     warn("Year Zero Engine: Combat is not active; patch not applied.");
@@ -708,6 +746,8 @@ Hooks.once("ready", () => {
     patchCombatTracker();
     installSocketListener();
     patchApplied = true;
+    equipmentOperations.register();
+    Hooks.on("fblQuickAccess.apiReady", () => equipmentOperations.register());
     installActionWidgetHooks();
     refreshActionWidget();
     log(`Applied for yze-combat ${TARGET_VERSION}.`);
