@@ -14,6 +14,7 @@ const FAST_ACTION = "fastAction";
 const SLOW_ACTION = "slowAction";
 
 const pendingRoundRequests = new Map();
+const gmAdvancing = new Set();
 
 let originalNextRound = null;
 let patchApplied = false;
@@ -111,37 +112,49 @@ function requestRoundAdvance(combat) {
 
   pendingRoundRequests.set(requestId, {
     combatId: combat.id,
+    gmId: gm.id,
     promise,
     resolve: resolveRequest,
     timeout,
   });
 
-  game.socket.emit(SOCKET, {
-    type: "advance-round-request",
-    requestId,
-    combatId: combat.id,
-    requesterId: game.user.id,
-    expectedRound: combat.round,
-    expectedTurn: combat.turn,
-  });
+  try {
+    game.socket.emit(SOCKET, {
+      type: "advance-round-request",
+      requestId,
+      combatId: combat.id,
+      requesterId: game.user.id,
+      expectedRound: combat.round,
+      expectedTurn: combat.turn,
+    });
+  }
+  catch (error) {
+    window.clearTimeout(timeout);
+    pendingRoundRequests.delete(requestId);
+    warn("Could not send round advance request", error);
+    ui.notifications?.warn("Не удалось передать запрос GM. Попробуйте ещё раз.");
+    resolveRequest(combat);
+  }
 
   return promise;
 }
 
-async function handleRoundAdvanceRequest(message) {
+/** Authorize with the sender appended by Foundry's server, never with payload identity. */
+async function handleRoundAdvanceRequest(message, senderUserId) {
   if (!game.user.isGM) return;
 
   const responsibleGM = getResponsibleGM();
   if (!responsibleGM || responsibleGM.id !== game.user.id) return;
 
-  const requester = game.users.get(message.requesterId);
+  if (typeof senderUserId !== "string" || message.requesterId !== senderUserId) return;
+  const requester = game.users.get(senderUserId);
   const combat = game.combats.get(message.combatId);
 
   const reject = reason => {
     game.socket.emit(SOCKET, {
       type: "advance-round-result",
       requestId: message.requestId,
-      targetUserId: message.requesterId,
+      targetUserId: senderUserId,
       combatId: message.combatId,
       ok: false,
       error: reason,
@@ -173,6 +186,14 @@ async function handleRoundAdvanceRequest(message) {
     return;
   }
 
+  // Client-side click deduplication cannot protect against another owner's client.
+  // Acquire synchronously before the first await and release even after failure.
+  if (gmAdvancing.has(combat.id)) {
+    reject("Переход раунда уже выполняется.");
+    return;
+  }
+  gmAdvancing.add(combat.id);
+
   try {
     // Run YZE Combat's original nextRound() on the GM client. This preserves its
     // history flags, initiative reset logic and action cleanup, but the document
@@ -182,7 +203,7 @@ async function handleRoundAdvanceRequest(message) {
     game.socket.emit(SOCKET, {
       type: "advance-round-result",
       requestId: message.requestId,
-      targetUserId: message.requesterId,
+      targetUserId: senderUserId,
       combatId: message.combatId,
       ok: true,
     });
@@ -191,13 +212,19 @@ async function handleRoundAdvanceRequest(message) {
     console.error(`${MODULE_ID} | GM round transition failed`, error);
     reject(error?.message ?? "Не удалось перейти к следующему раунду.");
   }
+  finally {
+    gmAdvancing.delete(combat.id);
+  }
 }
 
-function handleRoundAdvanceResult(message) {
+/** Only the originally selected GM may settle this client's pending request. */
+function handleRoundAdvanceResult(message, senderUserId) {
   if (message.targetUserId !== game.user.id) return;
 
   const pending = pendingRoundRequests.get(message.requestId);
   if (!pending) return;
+  if (senderUserId !== pending.gmId || !game.users.get(senderUserId)?.isGM ||
+      message.combatId !== pending.combatId || typeof message.ok !== "boolean") return;
 
   window.clearTimeout(pending.timeout);
   pendingRoundRequests.delete(message.requestId);
@@ -210,14 +237,17 @@ function handleRoundAdvanceResult(message) {
 }
 
 function installSocketListener() {
-  game.socket.on(SOCKET, async message => {
+  // Foundry 13.351 registerCustomSocket -> handleCustomSocket appends this.user.id
+  // from the server connection as the second listener argument. Fail closed when
+  // that authenticated metadata is absent; never fall back to requesterId.
+  game.socket.on(SOCKET, async (message, senderUserId) => {
     if (!message || typeof message !== "object") return;
 
     if (message.type === "advance-round-request") {
-      await handleRoundAdvanceRequest(message);
+      await handleRoundAdvanceRequest(message, senderUserId);
     }
     else if (message.type === "advance-round-result") {
-      handleRoundAdvanceResult(message);
+      handleRoundAdvanceResult(message, senderUserId);
     }
   });
 }

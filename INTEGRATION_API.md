@@ -20,9 +20,10 @@ access is introduced. Equipment controls themselves are planned for later.
 ```js
 const state = widget.quickAccess.getState();
 // null if there is no owned current combatant or compatible equipment provider.
-if (state?.editable) {
+const slot = state?.slots.find(slot => slot.available && slot.canHold && slot.itemId);
+if (state?.editable && slot) {
   await widget.quickAccess.performAction(
-    { type: "hold", itemId: state.slots[0].itemId, hand: "right" },
+    { type: "hold", itemId: slot.itemId, hand: "right" },
     { expectedRevision: state.revision });
 }
 ```

@@ -1,6 +1,6 @@
 # YZE Combat: Permission Fix + Action Widget
 
-Version 1.2.0
+Version 1.2.1
 
 Target environment:
 
@@ -16,6 +16,18 @@ Target environment:
 2. Non-GM combat tracker renders no longer run YZE Combat's automatic group
    leader repair. That maintenance remains GM-only, preventing repeated
    permission errors on player clients.
+
+The GM authorizes the request using the sender ID supplied by Foundry's server
+as the second module-socket callback argument. The claimed `requesterId` must
+match that sender. Player replies must likewise come from the GM selected for
+the pending request and match its combat. Missing sender metadata is rejected.
+This transport was verified against Foundry 13.351's `registerCustomSocket` and
+`handleCustomSocket`; no server modification or Quick Access dependency is needed.
+
+Only one delegated round advance per combat can run on the responsible GM at
+a time. The guard releases after success or failure, and the original YZE Combat
+`nextRound` still handles history, initiative and action resets. It does not lock
+manual GM actions or provide a transaction across different GM clients.
 
 ## Action widget
 
@@ -91,3 +103,15 @@ game.modules.get("yze-combat-permission-fix").api
 ```
 
 `applied` should be `true`.
+
+## Changelog
+
+### 1.2.1
+
+- Authenticate round requests and replies with Foundry's server-supplied sender
+  metadata instead of trusting socket payload identities.
+- Reject simultaneous delegated advances of the same combat before awaiting the
+  first write; always release the guard after failure.
+- Settle failed socket sends immediately so a retry is not blocked by a timer.
+- Correct the equipment example to select an eligible nonempty slot.
+- Add 9 behavioral permission/round-transition regressions (15 tests total).
