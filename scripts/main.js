@@ -510,7 +510,7 @@ async function toggleActionFromWidget(statusId) {
 
   const currentlySpent = actorHasActionStatus(actor, statusId);
   if (equipmentOperations?.isBusy(actor.uuid)) return;
-  if (["pending", "undoing"].includes(readEquipmentOperation(actor)?.phase)) return;
+  if (supportsEquipmentControls() && ["pending", "undoing"].includes(readEquipmentOperation(actor)?.phase)) return;
   widgetMutationBusy = true;
 
   try {
@@ -664,7 +664,8 @@ function refreshActionWidgetNow() {
   const equipment = quickAccess.getState();
   equipmentPanels.get(element)?.update(actor, equipment, game.combat);
   const operation = readEquipmentOperation(actor);
-  const disabled = widgetMutationBusy || equipmentOperations?.isBusy(actor.uuid) || ["pending", "undoing"].includes(operation?.phase);
+  const disabled = widgetMutationBusy || supportsEquipmentControls() &&
+    (equipmentOperations?.isBusy(actor.uuid) || ["pending", "undoing"].includes(operation?.phase));
   for (const button of element.querySelectorAll(".yze-action-widget__action")) button.disabled = Boolean(disabled);
   Hooks.callAll("yzeCombatPermissionFix.widgetUpdated", {
     element, combatant, actor, equipment

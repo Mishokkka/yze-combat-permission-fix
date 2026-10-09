@@ -82,6 +82,17 @@ try{
   assert.deepEqual(await page.evaluate(()=>harness.api.getEquipmentState(harness.actor).hands),{left:'sword',right:'sword'});
   assert.equal(await page.locator('.yze-equipment__hand.is-both').count(),1);
   assert.deepEqual(await page.evaluate(()=>({grip:harness.actor.apps.test.element.querySelector('.fblqa-grip-label')?.textContent,wallet:harness.actor.apps.test.element.querySelector('.wallet-test')===harness.actor.walletNode})),{grip:'2Р',wallet:true});
+  const translated=await page.evaluate(async()=>{
+    const original=game.i18n, english=await fetch('/qa/lang/en.json').then(r=>r.json());
+    const value=key=>key.split('.').reduce((object,part)=>object?.[part],english);
+    game.i18n={has:key=>value(key)!==undefined,localize:key=>value(key)??key,format:key=>value(key)??key};
+    const changes={'flags.fbl-quick-access.equipmentHands':harness.api.getEquipmentState(harness.actor).hands};
+    Hooks.callAll('updateActor',harness.actor,changes,{render:false});
+    const badge=harness.actor.apps.test.element.querySelector('.fblqa-grip-label');
+    const result={text:badge.textContent,title:badge.title};game.i18n=original;
+    Hooks.callAll('updateActor',harness.actor,changes,{render:false});return result;
+  });
+  assert.deepEqual(translated,{text:'2H',title:'Both hands'});
   assert.equal(await page.locator('[data-cost]').inputValue(),'');
   assert.equal(await page.locator('[data-cost] option[value="fast"]').isDisabled(),true);
   await page.locator('[data-undo]').click();await page.waitForFunction(()=>harness.actor.getFlag('', 'equipmentOperation')?.phase==='undone');
@@ -136,10 +147,16 @@ try{
   assert.ok(bounds.scroll>bounds.height);assert.equal(bounds.width,bounds.scrollWidth);
   await page.locator('[data-apply]').scrollIntoViewIfNeeded();assert.equal(await page.locator('[data-apply]').isVisible(),true);
   if(process.env.SCREENSHOT_DIR)await page.screenshot({path:resolve(process.env.SCREENSHOT_DIR,'equipment-narrow.png')});
-  // Absent QA retains the action widget and the memo.
-  await page.evaluate(()=>{game.modules.get('fbl-quick-access').active=false;harness.module.api.refreshActionWidget();});
+  // Removing QA while a paid operation is pending retains native actions.
+  await page.locator('[data-cost]').selectOption('both');
+  await page.evaluate(()=>harness.actor.failFee='slowAction');await page.locator('[data-apply]').click();
+  await page.locator('[data-resume]').waitFor();
+  await page.evaluate(()=>{game.modules.get('fbl-quick-access').active=false;harness.actor.failFee=null;harness.module.api.refreshActionWidget();});
   await page.locator('.yze-equipment').waitFor({state:'hidden'});
   await page.locator('[data-action="slowAction"]').click();await page.waitForFunction(()=>harness.actor.statuses.has('slowAction'));
+  await page.evaluate(()=>{game.modules.get('fbl-quick-access').active=true;harness.actor.failFee=null;harness.module.api.refreshActionWidget();});
+  await page.locator('[data-cancel]').click();await page.waitForFunction(()=>harness.actor.getFlag('', 'equipmentOperation')?.phase==='undone');
+  assert.deepEqual(await page.evaluate(()=>[...harness.actor.statuses]),['slowAction']);
   await page.evaluate(()=>{game.modules.get('fbl-quick-access').active=true;game.combat.started=false;game.user.character=harness.actor;harness.module.api.refreshActionWidget();});
   await page.locator('.yze-action-widget__actions').waitFor({state:'hidden'});
   await page.locator('[data-slot="2"]').click();await page.locator('[data-grip="right"]').click();

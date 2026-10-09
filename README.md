@@ -117,8 +117,7 @@ and transport. It checks desktop/narrow/touch layout, mandatory cost selection,
 payment/recovery/undo, slot setup, Actor guards, memo and optional integration.
 A live GM/player session remains the final in-world acceptance check.
 
-The equipment list/buttons will be added in a later release. The current action
-buttons, permission fixes and reference work without Quick Access or with older
+The action buttons, permission fixes and reference work without Quick Access or with older
 versions. Neither module requires the other.
 
 ## Installation
@@ -144,6 +143,9 @@ itself on any other YZE Combat version instead of guessing against changed code.
 8. With and without Quick Access enabled, verify that the actions/reference work.
    With Quick Access 1.7.27, `api.quickAccess.getState()` should follow the selected
    owned combat token, including an unlinked token's synthetic Actor.
+9. With Quick Access 1.7.29+, select equipment and a manipulation. Confirm that
+   hands do not change until an explicit cost is chosen and applied. Check native
+   YZE action marks, undo, free slot setup and grip changes outside combat.
 
 Console diagnostic:
 
@@ -156,6 +158,18 @@ game.modules.get("yze-combat-permission-fix").api
 ## Changelog
 
 ### 1.3.0
+
+- Ship the agreed compact equipment controls with persistent collapsible slots,
+  visible grips, previews, native Item sheets/tooltips and free slot setup.
+- Require a price for each combat manipulation; coordinate equipment and native
+  action effects on the active GM with durable receipts, recovery and guarded undo.
+- Preserve standalone actions/memo even when Quick Access is unavailable during
+  a pending equipment operation. Keep the round permission socket separate.
+- Correct Arms Length/Near memo ranges to 0–2 m / 2–6 m; support free equipment
+  management outside combat and desktop/narrow/touch layouts.
+- Add 15 operation regressions (30 total) and a browser integration harness.
+
+### 1.2.1
 
 - Authenticate round requests and replies with Foundry's server-supplied sender
   metadata instead of trusting socket payload identities.
