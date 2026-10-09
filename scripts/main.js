@@ -1,3 +1,6 @@
+import { createCombatReference } from "./combat-reference.js";
+import { createQuickAccessBridge } from "./quick-access-bridge.js";
+
 const MODULE_ID = "yze-combat-permission-fix";
 const TARGET_MODULE_ID = "yze-combat";
 const TARGET_VERSION = "1.6.1";
@@ -6,6 +9,7 @@ const REQUEST_TIMEOUT_MS = 10000;
 
 const WIDGET_ID = `${MODULE_ID}-action-widget`;
 const WIDGET_POSITION_SETTING = "actionWidgetPosition";
+const REFERENCE_OPEN_SETTING = "combatReferenceOpen";
 const FAST_ACTION = "fastAction";
 const SLOW_ACTION = "slowAction";
 
@@ -15,6 +19,15 @@ let originalNextRound = null;
 let patchApplied = false;
 let widgetRefreshQueued = false;
 let widgetMutationBusy = false;
+
+const quickAccess = createQuickAccessBridge(
+  () => {
+    const combatant = getWidgetCombatant();
+    return combatant?.actor ?? combatant?.token?.actor ?? null;
+  },
+  actor => Boolean(actor?.isOwner),
+  (...args) => warn(...args)
+);
 
 function log(...args) {
   console.log(`${MODULE_ID} |`, ...args);
@@ -520,9 +533,22 @@ function createActionWidget() {
     )
   );
 
+  element.append(createCombatReference({
+    open: game.settings.get(MODULE_ID, REFERENCE_OPEN_SETTING),
+    onToggle(open) {
+      game.settings.set(MODULE_ID, REFERENCE_OPEN_SETTING, open)
+        .catch(error => warn("Could not save combat reference state", error));
+      // Opening the reference increases the widget height. Keep its handle in view.
+      requestAnimationFrame(() => {
+        if (element.isConnected && !element.hidden) {
+          saveWidgetPosition(element).catch(error => warn("Could not reposition combat reference", error));
+        }
+      });
+    }
+  }));
+
   document.body.append(element);
   installWidgetDragging(element);
-  applyStoredWidgetPosition(element);
   return element;
 }
 
@@ -560,11 +586,24 @@ function refreshActionWidgetNow() {
   element.hidden = !shouldShow;
   if (!shouldShow) return;
 
+  // A hidden widget has no measurable dimensions. Clamp after making it visible.
+  if (element.dataset.positionReady !== "true") {
+    applyStoredWidgetPosition(element);
+    element.dataset.positionReady = "true";
+  }
+  const rect = element.getBoundingClientRect();
+  const position = clampWidgetPosition(element, rect.left, rect.top);
+  element.style.left = `${position.left}px`;
+  element.style.top = `${position.top}px`;
+
   const name = element.querySelector(".yze-action-widget__name");
   if (name) name.textContent = combatant.name ?? actor.name ?? "Действия";
 
   updateActionButton(element, FAST_ACTION, actorHasActionStatus(actor, FAST_ACTION));
   updateActionButton(element, SLOW_ACTION, actorHasActionStatus(actor, SLOW_ACTION));
+  Hooks.callAll("yzeCombatPermissionFix.widgetUpdated", {
+    element, combatant, actor, equipment: quickAccess.getState()
+  });
 }
 
 function refreshActionWidget() {
@@ -586,9 +625,15 @@ function installActionWidgetHooks() {
     "deleteActiveEffect",
     "canvasReady",
     "controlToken",
+    "fblQuickAccess.apiReady",
   ];
 
   for (const hook of refreshHooks) Hooks.on(hook, refreshActionWidget);
+  Hooks.on("fblQuickAccess.equipmentChanged", actor => {
+    const combatant = getWidgetCombatant();
+    const current = combatant?.actor ?? combatant?.token?.actor;
+    if (current && actor?.uuid === current.uuid) refreshActionWidget();
+  });
 
   window.addEventListener("resize", () => {
     const element = document.getElementById(WIDGET_ID);
@@ -607,6 +652,9 @@ Hooks.once("init", () => {
     config: false,
     type: Object,
     default: {},
+  });
+  game.settings.register(MODULE_ID, REFERENCE_OPEN_SETTING, {
+    scope: "client", config: false, type: Boolean, default: false,
   });
 });
 
@@ -648,7 +696,7 @@ Hooks.once("shutdown", () => {
   pendingRoundRequests.clear();
 });
 
-// Expose a tiny read-only diagnostic surface for console checks.
+// Preserve diagnostics and publish the optional equipment bridge for future UI.
 Hooks.once("ready", () => {
   const module = game.modules.get(MODULE_ID);
   if (module) {
@@ -660,6 +708,8 @@ Hooks.once("ready", () => {
         return TARGET_VERSION;
       },
       refreshActionWidget,
+      quickAccess,
     });
+    Hooks.callAll("yzeCombatPermissionFix.apiReady", module.api);
   }
 });

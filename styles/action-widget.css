@@ -2,6 +2,8 @@
   position: fixed;
   z-index: 101;
   width: 278px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 8px;
@@ -132,4 +134,61 @@
 
 #yze-combat-permission-fix-action-widget .is-available .yze-action-widget__state {
   color: rgba(255, 255, 255, 0.92);
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference {
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference summary {
+  padding: 8px 9px;
+  cursor: pointer;
+  font-weight: 600;
+  color: inherit;
+}
+
+#yze-combat-permission-fix-action-widget :is(summary, button, [tabindex]):focus-visible {
+  outline: 2px solid #c9ab69;
+  outline-offset: -2px;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference-body {
+  max-height: min(420px, 55vh, calc(100vh - 140px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 10px 8px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference article + article {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference h4 {
+  margin: 0 0 3px;
+  border: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #e5c889;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference p {
+  margin: 3px 0;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1px 6px;
+  margin: 5px 0 0;
+}
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__reference :is(dt, dd) {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
