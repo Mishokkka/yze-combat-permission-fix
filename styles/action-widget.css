@@ -48,10 +48,24 @@
 }
 
 #yze-combat-permission-fix-action-widget .yze-action-widget__name {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+#yze-combat-permission-fix-action-widget .yze-action-widget__tool {
+  flex: 0 0 23px; width: 23px; height: 23px; min-width: 0; min-height: 0;
+  margin: 0; padding: 0; display: grid; place-items: center;
+  border: 0; border-radius: 3px; background: transparent; color: #f0f0e0;
+  font: inherit; font-size: 17px; line-height: 1; box-shadow: none;
+  cursor: pointer; touch-action: manipulation;
+}
+#yze-combat-permission-fix-action-widget .yze-action-widget__tool:hover:enabled { background: rgba(255,255,255,.13); }
+#yze-combat-permission-fix-action-widget .yze-action-widget__tool:disabled { opacity: .35; cursor: default; }
+#yze-combat-permission-fix-action-widget .yze-action-widget__tool.has-pending-operation { color: #e5c889; }
+#yze-combat-permission-fix-action-widget.is-collapsed .yze-action-widget__handle { border-bottom: 0; }
 
 #yze-combat-permission-fix-action-widget .yze-action-widget__actions {
   display: grid;
@@ -207,12 +221,9 @@
 #yze-combat-permission-fix-action-widget .yze-equipment__hands-block {
   position: sticky; top: 0; z-index: 1; padding: 2px 5px 5px; background: #191714;
 }
-#yze-combat-permission-fix-action-widget .yze-equipment__hands-head,
 #yze-combat-permission-fix-action-widget .yze-equipment__menu-head {
   display: flex; align-items: center; gap: 4px; min-width: 0;
 }
-#yze-combat-permission-fix-action-widget .yze-equipment__hands-head { font-size: 10px; margin-bottom: 3px; }
-#yze-combat-permission-fix-action-widget .yze-equipment__hands-head span { flex: 1; }
 #yze-combat-permission-fix-action-widget .yze-equipment button {
   margin: 0; min-width: 0; min-height: 24px; height: auto; padding: 3px 5px;
   color: inherit; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.19);
@@ -248,19 +259,25 @@
 #yze-combat-permission-fix-action-widget .yze-equipment__price-label { display: block; margin-bottom: 3px; font-size: 10px; }
 #yze-combat-permission-fix-action-widget .yze-equipment__price-row { display: flex; gap: 4px; }
 #yze-combat-permission-fix-action-widget .yze-equipment select {
+  color-scheme: dark;
   min-width: 0; max-width: 100%; width: 100%; height: 26px; padding: 2px 3px;
   font: inherit; color: #f0f0e0; background: #29251f; border: 1px solid rgba(255,255,255,.25); border-radius: 3px;
 }
+#yze-combat-permission-fix-action-widget .yze-equipment select option {
+  color: #f0f0e0; background-color: #29251f;
+}
+#yze-combat-permission-fix-action-widget .yze-equipment select option:disabled { color: #aaa59b; }
 #yze-combat-permission-fix-action-widget .yze-equipment__price-row select { flex: 1; }
 #yze-combat-permission-fix-action-widget .yze-equipment__price-row button { flex: 0 0 auto; border-color: #a98f56; }
 #yze-combat-permission-fix-action-widget .yze-equipment__settings label { display: block; margin: 3px 0; font-size: 10px; }
 #yze-combat-permission-fix-action-widget .yze-equipment__settings > button { width: 100%; margin-bottom: 3px; }
 #yze-combat-permission-fix-action-widget .yze-equipment__recovery { padding: 5px; border: 1px solid #a98f56; border-radius: 4px; line-height: 1.4; }
 #yze-combat-permission-fix-action-widget .yze-equipment__recovery > div { display: flex; gap: 3px; margin-top: 4px; }
-#yze-combat-permission-fix-action-widget .yze-equipment button.yze-equipment__undo { width: calc(100% - 10px); margin: 0 5px 4px; font-size: 10px; }
 #yze-combat-permission-fix-action-widget .yze-equipment__message:not(:empty) { padding: 3px 6px 5px; overflow-wrap: anywhere; font-size: 10px; line-height: 1.4; }
 #yze-combat-permission-fix-action-widget .yze-equipment__empty { grid-column: 1 / -1; font-size: 10px; }
 @media (pointer: coarse) {
+  #yze-combat-permission-fix-action-widget .yze-action-widget__handle { height: 44px; gap: 3px; padding: 0 5px; }
+  #yze-combat-permission-fix-action-widget .yze-action-widget__tool { flex-basis: 44px; width: 44px; height: 44px; }
   #yze-combat-permission-fix-action-widget .yze-action-widget__action,
   #yze-combat-permission-fix-action-widget .yze-equipment button,
   #yze-combat-permission-fix-action-widget .yze-equipment select,

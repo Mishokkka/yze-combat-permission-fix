@@ -7,7 +7,7 @@ const costs = { free: "Без траты", fast: "Быстрое", slow: "Осн
 const statusCosts = { free: [], fast: ["fastAction"], slow: ["slowAction"], both: ["fastAction", "slowAction"] };
 
 /** Keep all menus bound to an Actor UUID; render read-only snapshots through the public API. */
-export function createEquipmentPanel({ operations, onLayout }) {
+export function createEquipmentPanel({ operations, onLayout, onControlsChange }) {
   const element = document.createElement("div");
   element.className = "yze-equipment";
   // Native details.toggle does not bubble. Slot settings can increase the
@@ -33,14 +33,36 @@ export function createEquipmentPanel({ operations, onLayout }) {
   }
 
   function reset() { selected = null; slotIndex = null; command = null; cost = ""; message = ""; }
+  function controls() {
+    const available = Boolean(actor && state && supportsEquipmentControls());
+    const operation = available ? readEquipmentOperation(actor) : null;
+    const pending = ["pending", "undoing"].includes(operation?.phase);
+    const blocked = !available || !state.editable || busy || operations.isBusy(actor?.uuid) || pending;
+    const undoReason = operation?.phase === "complete" ? equipmentUndoError(actor) : "";
+    return {
+      available, pending,
+      swapDisabled: blocked || state.hands.left === state.hands.right,
+      undoVisible: operation?.phase === "complete" && Boolean(operation.changed),
+      undoDisabled: blocked || Boolean(undoReason), undoReason,
+    };
+  }
+  function swapHands() {
+    if (controls().swapDisabled) return false;
+    reset(); command = { type: "swapHands" }; render(); return true;
+  }
+  function undoLast() {
+    const current = controls();
+    if (!current.undoVisible || current.undoDisabled) return;
+    return apply({ kind: "undo", id: readEquipmentOperation(actor).id });
+  }
   function render() {
     signature = "";
+    onControlsChange?.(controls());
     if (!actor || !state || !supportsEquipmentControls()) { element.hidden = true; return; }
     element.hidden = false;
     const editable = state.editable && !busy && !operations.isBusy(actor.uuid);
     const operation = readEquipmentOperation(actor);
     const pending = ["pending", "undoing"].includes(operation?.phase);
-    const undoError = operation?.phase === "complete" ? equipmentUndoError(actor) : "";
     const blocked = !editable || pending;
     const both = state.hands.left && state.hands.left === state.hands.right;
     const handButton = hand => {
@@ -71,9 +93,9 @@ export function createEquipmentPanel({ operations, onLayout }) {
       ${selectedSlot.available ? `<label>Предмет<select data-assign-item aria-label="Предмет для слота"><option value="">Выбрать…</option>${state.inventory.map(i => `<option value="${escape(i.id)}">${escape(i.name)}</option>`).join("")}</select></label><button type="button" data-assign ${blocked ? "disabled" : ""}>Назначить</button>` : ""}
       <label>Переставить в<select data-move-to aria-label="Целевой слот">${state.slots.filter(s => s.available && s.index !== slotIndex).map(s => `<option value="${s.index}">${s.index + 1}: ${escape(s.item?.name ?? "Пусто")}</option>`).join("")}</select></label><button type="button" data-move ${blocked || !state.slots.some(s => s.available && s.index !== slotIndex) ? "disabled" : ""}>Переставить</button>
       <button type="button" data-clear-slot ${blocked || !selectedSlot.itemId ? "disabled" : ""}>Освободить слот</button></details>` : "";
-    element.innerHTML = `<div class="yze-equipment__hands-block"><div class="yze-equipment__hands-head"><span>В руках</span><button type="button" data-swap-hands ${blocked || state.hands.left === state.hands.right ? "disabled" : ""}>Поменять руки</button></div><div class="yze-equipment__hands">${both ? handButton("both") : handButton("left") + handButton("right")}</div></div>${menu}
+    element.innerHTML = `<div class="yze-equipment__hands-block"><div class="yze-equipment__hands">${both ? handButton("both") : handButton("left") + handButton("right")}</div></div>${menu}
       <details class="yze-equipment__slots" ${open ? "open" : ""}><summary>Быстрый доступ · ${state.capacity} слотов${state.slots.length > state.capacity ? " · есть избыток" : ""}</summary><div class="yze-equipment__grid" style="--equipment-columns:${Math.max(1, Math.ceil(Math.min(state.slots.length, 10) / 2))}">${slots || '<span class="yze-equipment__empty">Нет доступных слотов</span>'}</div>${state.slots.length > 10 ? `<p>Ещё ${state.slots.length - 10} сохранённых привязок. Настройте их на листе.</p>` : ""}${settings}</details>
-      ${pending ? `<div class="yze-equipment__recovery" role="alert">${operation.phase === "undoing" ? "Отмена ожидает завершения" : "Операция ожидает завершения"}<div><button type="button" data-resume ${busy ? "disabled" : ""}>Продолжить</button><button type="button" data-cancel ${busy ? "disabled" : ""}>Отменить операцию</button></div></div>` : operation?.phase === "complete" && operation.changed ? `<button type="button" class="yze-equipment__undo" data-undo title="${escape(undoError || "Вернуть прежнюю экипировку и стоимость этой операции")}" ${blocked || undoError ? "disabled" : ""}>Отменить последнюю операцию</button>` : ""}
+      ${pending ? `<div class="yze-equipment__recovery" role="alert">${operation.phase === "undoing" ? "Отмена ожидает завершения" : "Операция ожидает завершения"}<div><button type="button" data-resume ${busy ? "disabled" : ""}>Продолжить</button><button type="button" data-cancel ${busy ? "disabled" : ""}>Отменить операцию</button></div></div>` : ""}
       <div class="yze-equipment__message" ${message ? 'role="alert"' : 'aria-live="polite"'}>${escape(busy ? "Применение…" : message)}</div>`;
     const details = element.querySelector(".yze-equipment__slots");
     details.addEventListener("toggle", () => {
@@ -91,10 +113,9 @@ export function createEquipmentPanel({ operations, onLayout }) {
     const target = actor;
     busy = true; message = ""; render();
     try {
-      const result = await operations.request({ actorUuid: target.uuid, ...payload });
+      await operations.request({ actorUuid: target.uuid, ...payload });
       if (actor?.uuid !== target.uuid) return;
       command = null; cost = "";
-      message = result.changed ? "Применено" : "Без изменений";
     } catch (error) {
       if (actor?.uuid === target.uuid) message = error.message;
     } finally {
@@ -126,8 +147,6 @@ export function createEquipmentPanel({ operations, onLayout }) {
       const hand = button.dataset.grip;
       command = hand === "stow" ? { type: "stow", hand: state.hands.left === selected ? "left" : "right" } : { type: "hold", itemId: selected, hand };
       cost = "";
-    } else if (button.hasAttribute("data-swap-hands")) {
-      selected = null; slotIndex = null; command = { type: "swapHands" }; cost = "";
     } else if (button.hasAttribute("data-open-item")) {
       actor.items.get(selected)?.sheet?.render(true); return;
     } else if (button.hasAttribute("data-close")) reset();
@@ -148,7 +167,7 @@ export function createEquipmentPanel({ operations, onLayout }) {
     } else {
       const operation = readEquipmentOperation(actor);
       if (!operation) return;
-      const kind = button.hasAttribute("data-resume") ? "resume" : button.hasAttribute("data-cancel") ? "cancel" : button.hasAttribute("data-undo") ? "undo" : null;
+      const kind = button.hasAttribute("data-resume") ? "resume" : button.hasAttribute("data-cancel") ? "cancel" : null;
       if (!kind) return;
       void apply({ kind, id: operation.id }); return;
     }
@@ -165,5 +184,5 @@ export function createEquipmentPanel({ operations, onLayout }) {
     if (nextSignature === signature) return;
     render(); signature = nextSignature;
   }
-  return { element, update, get busy() { return busy; } };
+  return { element, update, swapHands, undoLast, get busy() { return busy; } };
 }

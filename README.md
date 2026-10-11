@@ -1,6 +1,6 @@
 # YZE Combat: Permission Fix + Action Widget
 
-Version 1.3.0
+Version 1.4.0
 
 Target environment:
 
@@ -31,7 +31,7 @@ manual GM actions or provide a transaction across different GM clients.
 
 ## Action widget
 
-Normal players get a small always-on-screen widget while combat is active and
+Normal players get a small collapsible widget while combat is active and
 YZE Combat's **Slow & Fast Actions** mode is enabled.
 
 - **БЫСТРОЕ** corresponds to YZE Combat `fastAction`.
@@ -42,6 +42,10 @@ YZE Combat's **Slow & Fast Actions** mode is enabled.
   combat tracker. There is no separate action counter or duplicated state.
 - Drag the small title bar to put the widget anywhere on screen. Its position is
   stored per browser/client.
+- The header chevron collapses the entire widget to the character name and compact
+  tools. This state survives reloads; slots and reference keep their own states.
+  Header buttons do not start dragging. Swap hands opens the cost preview; undo
+  expands the widget so that any error is visible. Neither runs a hidden new charge.
 - The widget is hidden for the GM. With compatible Quick Access it also shows equipment outside combat for a selected owned character token or the player's assigned character; action buttons are hidden there.
 - If a player owns several combatants, selecting one of their tokens makes the
   widget follow that token. Otherwise it prefers the player's active combatant.
@@ -69,7 +73,7 @@ Quick Access owns slots and manual grips. No private imports or duplicated
 equipment storage are used.
 See [INTEGRATION_API.md](INTEGRATION_API.md) for methods and events.
 
-- Hands stay visible. Expand/collapse the compact slots independently of the memo;
+- Hands stay visible while the widget is expanded. Collapse the compact slots independently of the memo;
   the client remembers both states. Desktop width is 268 px, slot height 44 px.
 - Select a slot/held item, then **Левая / Правая / Обе / Убрать**. The preview
   explains which items will be stowed and shows the resulting hands. **Открыть**
@@ -85,6 +89,9 @@ See [INTEGRATION_API.md](INTEGRATION_API.md) for methods and events.
 - **Отменить последнюю операцию** restores only the touched equipment fields
   and that operation's own native action effects. It is disabled if equipment,
   Items, round or paid marks changed so that restoration would be unsafe.
+- Swap hands and undo are compact header icons with accessible names and tooltips.
+  The redundant hands heading and success message are removed. Cost/setup menus
+  use explicitly contrasting option colors, including unavailable costs.
 
 Paid operations require an active GM and run through Quick Access's existing
 authenticated GM execution channel, independently of the round-transition fix.
@@ -102,9 +109,19 @@ transaction or distributed lock across clients. Grips are manual marks and do
 not alter native carry state or enforce weapon rules. Attacks, consumables,
 drop/transfer and loadouts are separate future features.
 
+## Future rolls
+
+The additive `api.rolls` bridge prepares native weapon attacks, Dodge and Parry
+for future widget buttons. It checks the current owned Actor UUID, equipment
+revision (when supplied), held Item, system version and pending operation before
+opening the same dialog as the character sheet. Roll Dialog Plus **0.7.1** enhances
+these dialogs automatically when active/enabled; without it the native dialog works.
+There are no roll buttons or automatic action charges in this release.
+See [ROLL_INTEGRATION.md](ROLL_INTEGRATION.md) for the researched contract and next steps.
+
 ## Verification
 
-`npm test` runs 30 regressions, including the unchanged round permission fix,
+`npm test` runs 36 regressions, including the unchanged round permission fix,
 partial hand/effect acknowledgements, payment, safe undo, concurrency and GM
 handover. The companion Quick Access suite passes 237 tests.
 
@@ -114,7 +131,8 @@ On Windows set `QA_SOURCE` as an environment variable first. Optional
 `PLAYWRIGHT_MODULE` and `CHROME_PATH` select an existing installation.
 The harness imports the real runtime modules but simulates Foundry Documents
 and transport. It checks desktop/narrow/touch layout, mandatory cost selection,
-payment/recovery/undo, slot setup, Actor guards, memo and optional integration.
+payment/recovery/undo, slot setup, Actor guards, whole-widget persistence, header
+tools, contrasting dropdown options, memo and optional integration.
 A live GM/player session remains the final in-world acceptance check.
 
 The action buttons, permission fixes and reference work without Quick Access or with older
