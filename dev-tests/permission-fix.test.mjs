@@ -37,7 +37,7 @@ function fixture() {
   const context = vm.createContext({
     console: { log() {}, warn() {}, error() {} },
     Hooks: { on() {}, once() {}, callAll() {} },
-    createCombatReference() {}, createQuickAccessBridge: () => ({}),
+    createCombatReference() {}, createQuickAccessBridge: () => ({}), createRollBridge: () => ({}),
     CONFIG: { Combat: { documentClass: Combat }, ui: { combat: YzeTracker } },
     CONST: { DOCUMENT_OWNERSHIP_LEVELS: { OWNER: 3 } },
     foundry: { utils: { randomID: () => `request${++sequence}` } },

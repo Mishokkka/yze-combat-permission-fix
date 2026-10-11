@@ -17,7 +17,7 @@ window.CONST={DOCUMENT_OWNERSHIP_LEVELS:{OWNER:3,OBSERVER:2}};
 let sequence=0;
 window.foundry={utils:{randomID:()=>('op'+(++sequence))}};
 const stored=new Map(JSON.parse(localStorage.getItem('test-settings')||'[]'));
-const module={active:true,version:'1.3.0'};
+const module={active:true,version:'1.4.0'};
 const player={id:'player',active:true,isGM:false};
 // Transport is simulated in one browser; identity/authority is tested separately.
 const authority={id:'player',active:true,isGM:true};
@@ -47,7 +47,7 @@ window.harness={actor,other,module,stored,api};window.loaded=true;
 `;
 const server=createServer((req,res)=>{
   const url=new URL(req.url,'http://localhost');
-  if(url.pathname==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(`<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/yze/styles/action-widget.css"><link rel="stylesheet" href="/qa/styles/02-tooltips.css"><style>body{margin:0;background:#403d38;font-family:Arial}</style><script type="module">${bootstrap}</script>`);return;}
+  if(url.pathname==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(`<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/yze/styles/action-widget.css"><link rel="stylesheet" href="/qa/styles/02-tooltips.css"><style>body{margin:0;background:#403d38;font-family:Arial}select option{background:#eee;color:inherit}</style><script type="module">${bootstrap}</script>`);return;}
   const root=url.pathname.startsWith('/qa/')?qa:yze;
   const file=resolve(root,url.pathname.replace(/^\/(qa|yze)\//,''));
   if(!file.startsWith(resolve(root)+sep)){res.statusCode=403;res.end();return;}
@@ -64,6 +64,25 @@ try{
   assert.equal(await page.locator('[data-slot]').count(),8);
   assert.equal(await page.locator('.yze-equipment__slot').first().evaluate(e=>e.getBoundingClientRect().height),44);
   assert.equal(await page.locator('.yze-action-widget__reference').evaluate(e=>e.open),false);
+  assert.equal(await page.locator('.yze-equipment__hands-head').count(),0);
+  assert.equal(await page.locator('.yze-action-widget__handle [data-swap-hands]').count(),1);
+  assert.equal(await page.locator('.yze-action-widget__handle [data-undo]').count(),1);
+  await page.locator('[data-collapse]').click();
+  await page.waitForFunction(()=>harness.stored.get('actionWidgetCollapsed')===true);
+  assert.equal(await widget.evaluate(e=>Math.round(e.getBoundingClientRect().height)),29);
+  assert.equal(await page.locator('.yze-action-widget__body').isVisible(),false);
+  assert.equal(await page.locator('.yze-action-widget__actions').isVisible(),false);
+  assert.equal(await page.locator('.yze-action-widget__name').textContent(),'Игрок');
+  await page.reload();await page.waitForFunction(()=>window.loaded);
+  assert.equal(await page.locator('[data-collapse]').getAttribute('aria-expanded'),'false');
+  await page.evaluate(()=>{Hooks.callAll('updateCombat');Hooks.callAll('controlToken');});
+  await page.waitForTimeout(50);
+  assert.equal(await page.locator('.yze-action-widget__body').isVisible(),false);
+  if(process.env.SCREENSHOT_DIR)await widget.screenshot({path:resolve(process.env.SCREENSHOT_DIR,'equipment-collapsed.png')});
+  // Toolbar clicks must not capture a drag or write the widget position.
+  const position=await page.evaluate(()=>harness.stored.get('actionWidgetPosition'));
+  await page.locator('[data-collapse]').click();
+  assert.deepEqual(await page.evaluate(()=>harness.stored.get('actionWidgetPosition')),position);
   if(process.env.SCREENSHOT_DIR){mkdirSync(process.env.SCREENSHOT_DIR,{recursive:true});await widget.screenshot({path:resolve(process.env.SCREENSHOT_DIR,'equipment-desktop.png')});}
   await page.locator('[data-slot="0"]').hover();await page.locator('#fblqa-item-tooltip.is-visible').waitFor();
   assert.ok((await page.locator('#fblqa-item-tooltip').textContent()).includes('Меч'));
@@ -75,6 +94,7 @@ try{
   await page.locator('[data-slot="0"]').click();await page.locator('[data-open-item]').click();
   assert.equal(await page.evaluate(()=>window.openedItem),'sword');
   await page.locator('[data-grip="both"]').click();
+  assert.deepEqual(await page.locator('[data-cost] option[value="free"]').evaluate(e=>({color:getComputedStyle(e).color,background:getComputedStyle(e).backgroundColor})),{color:'rgb(240, 240, 224)',background:'rgb(41, 37, 31)'});
   assert.equal(await page.locator('[data-apply]').isDisabled(),true);
   assert.deepEqual(await page.evaluate(()=>harness.api.getEquipmentState(harness.actor).hands),{left:null,right:null});
   await page.locator('[data-cost]').selectOption('fast');await page.locator('[data-apply]').click();
@@ -95,12 +115,20 @@ try{
   assert.deepEqual(translated,{text:'2H',title:'Both hands'});
   assert.equal(await page.locator('[data-cost]').inputValue(),'');
   assert.equal(await page.locator('[data-cost] option[value="fast"]').isDisabled(),true);
+  assert.equal(await page.locator('.yze-equipment__message').textContent(),'');
+  assert.equal(await page.locator('[data-swap-hands]').isDisabled(),true);
   await page.locator('[data-undo]').click();await page.waitForFunction(()=>harness.actor.getFlag('', 'equipmentOperation')?.phase==='undone');
   assert.equal(await page.evaluate(()=>harness.actor.statuses.size),0);
   // Both-cost failure after the first native effect: visible recovery, one grip write.
   await page.locator('[data-slot="1"]').click();await page.locator('[data-grip="left"]').click();await page.locator('[data-cost]').selectOption('both');
   await page.evaluate(()=>harness.actor.failFee='slowAction');await page.locator('[data-apply]').click();
   await page.locator('[data-resume]').waitFor();
+  await page.locator('[data-collapse]').click();
+  assert.equal(await page.locator('[data-collapse]').getAttribute('aria-expanded'),'false');
+  assert.ok((await page.locator('[data-collapse]').getAttribute('aria-label')).includes('незавершённая операция'));
+  assert.equal(await page.locator('[data-swap-hands]').isDisabled(),true);
+  assert.equal(await page.locator('[data-undo]').isVisible(),false);
+  await page.locator('[data-collapse]').click();
   if(process.env.SCREENSHOT_DIR)await widget.screenshot({path:resolve(process.env.SCREENSHOT_DIR,'equipment-recovery.png')});
   assert.equal(await page.evaluate(()=>harness.actor.effects.length),1);
   await page.evaluate(()=>harness.actor.failFee=null);await page.locator('[data-resume]').click();
@@ -162,11 +190,23 @@ try{
   await page.locator('[data-slot="2"]').click();await page.locator('[data-grip="right"]').click();
   assert.equal(await page.locator('[data-cost]').count(),0);await page.locator('[data-apply]').click();
   await page.waitForFunction(()=>harness.api.getEquipmentState(harness.actor).hands.right==='torch');
+  await page.locator('[data-collapse]').click();
+  await page.locator('[data-swap-hands]').click();
+  assert.equal(await page.locator('[data-collapse]').getAttribute('aria-expanded'),'true');
+  assert.equal(await page.locator('[data-apply]').isVisible(),true);
+  const handsBeforeSwap=await page.evaluate(()=>harness.api.getEquipmentState(harness.actor).hands);
+  await page.locator('[data-apply]').click();
+  await page.waitForFunction(previous=>harness.api.getEquipmentState(harness.actor).hands.left===previous.right,handsBeforeSwap);
+  await page.locator('[data-collapse]').click();await page.locator('[data-undo]').click();
+  await page.waitForFunction(()=>harness.actor.getFlag('', 'equipmentOperation')?.phase==='undone');
+  assert.deepEqual(await page.evaluate(()=>harness.api.getEquipmentState(harness.actor).hands),handsBeforeSwap);
+  assert.equal(await page.locator('.yze-equipment__message').textContent(),'');
   await page.evaluate(()=>{game.user.isGM=true;harness.module.api.refreshActionWidget();});await widget.waitFor({state:'detached'});
   assert.deepEqual(errors,[]);
   const touch=await browser.newPage({viewport:{width:320,height:480},hasTouch:true,isMobile:true});
   await touch.goto('http://127.0.0.1:'+server.address().port);await touch.waitForFunction(()=>window.loaded);
   assert.equal(await touch.locator('.yze-action-widget__action').first().evaluate(e=>e.getBoundingClientRect().height),44);
+  assert.equal(await touch.locator('[data-collapse]').evaluate(e=>e.getBoundingClientRect().height),44);
   await touch.locator('[data-slot="0"]').click();
   assert.equal(await touch.locator('[data-grip="left"]').evaluate(e=>e.getBoundingClientRect().height),44);
   if(process.env.SCREENSHOT_DIR)await touch.screenshot({path:resolve(process.env.SCREENSHOT_DIR,'equipment-touch.png')});

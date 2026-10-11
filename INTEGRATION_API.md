@@ -75,6 +75,28 @@ The collapsible combat reference uses client-only `combatReferenceOpen`; it
 contains the GM's supplied house rules and never changes roll modifiers.
 Slots use client-only `equipmentOpen`. Both disclosures preserve their state
 independently; equipment changes and slot settings are clamped to the viewport.
+Since 1.4.0, client-only `actionWidgetCollapsed` hides all content below the
+character header. Header tools are owned by the widget; the equipment controller
+reports their availability and revalidates undo/swap on invocation. Collapsing
+does not cancel a running operation. A pending operation highlights the expansion
+button and is included in its accessible name.
+
+## Native roll preparation (1.4.0)
+
+`api.rolls` is an additive version-1 bridge for future attack/reaction controls.
+It exposes `getState()` and async `open({kind, actorUuid, itemId?, expectedRevision?})`.
+Kinds are `attack`, `dodge`, and `parry`. Required `actorUuid` binds the request to
+the currently selected owned character, including synthetic token Actors.
+The detached state contains `actorUuid`, `equipmentRevision`, `available`, `dodge`,
+held `items[]` with `attack/parry` eligibility, and optional Roll Dialog Plus status.
+Item operations require compatible Quick Access and an Item currently in hand.
+Dodge also works without Quick Access. Unsupported system versions, missing
+native methods, broken characters/items and pending equipment operations fail closed.
+
+The bridge returns the native Application after opening the dialog. It never
+submits a roll or charges YZE actions. Roll Dialog Plus enhances that Application
+through its own render hooks; its current public API has no dialog-opening method.
+See [ROLL_INTEGRATION.md](ROLL_INTEGRATION.md) for confirmation hooks and cost design.
 
 ## Paid equipment operations (1.3.0)
 

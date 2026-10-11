@@ -2,6 +2,7 @@ import { createCombatReference } from "./combat-reference.js";
 import { createQuickAccessBridge } from "./quick-access-bridge.js";
 import { createEquipmentOperations, supportsEquipmentControls, readEquipmentOperation } from "./equipment-operations.js";
 import { createEquipmentPanel } from "./equipment-panel.js";
+import { createRollBridge } from "./roll-bridge.js";
 
 const MODULE_ID = "yze-combat-permission-fix";
 const TARGET_MODULE_ID = "yze-combat";
@@ -12,6 +13,7 @@ const REQUEST_TIMEOUT_MS = 10000;
 const WIDGET_ID = `${MODULE_ID}-action-widget`;
 const WIDGET_POSITION_SETTING = "actionWidgetPosition";
 const REFERENCE_OPEN_SETTING = "combatReferenceOpen";
+const WIDGET_COLLAPSED_SETTING = "actionWidgetCollapsed";
 const FAST_ACTION = "fastAction";
 const SLOW_ACTION = "slowAction";
 
@@ -32,6 +34,13 @@ const quickAccess = createQuickAccessBridge(
   actor => Boolean(actor?.isOwner),
   (...args) => warn(...args)
 );
+const rolls = createRollBridge({
+  getActor: getWidgetActor,
+  getEquipmentState: () => quickAccess.getState(),
+  isBusy: actor => widgetMutationBusy || equipmentPanels.get(document.getElementById(WIDGET_ID))?.busy ||
+    equipmentOperations?.isBusy(actor.uuid) ||
+    supportsEquipmentControls() && ["pending", "undoing"].includes(readEquipmentOperation(actor)?.phase),
+});
 
 function log(...args) {
   console.log(`${MODULE_ID} |`, ...args);
@@ -476,7 +485,7 @@ function installWidgetDragging(element) {
   };
 
   handle.addEventListener("pointerdown", event => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || event.target.closest("button")) return;
     const rect = element.getBoundingClientRect();
     drag = {
       pointerId: event.pointerId,
@@ -560,11 +569,15 @@ function createActionWidget() {
     <div class="yze-action-widget__handle" title="Перетащить">
       <i class="fa-solid fa-grip-dots"></i>
       <span class="yze-action-widget__name">Действия</span>
+      <button type="button" class="yze-action-widget__tool" data-swap-hands hidden title="Поменять руки" aria-label="Поменять руки">⇄</button>
+      <button type="button" class="yze-action-widget__tool" data-undo hidden title="Отменить последнюю операцию" aria-label="Отменить последнюю операцию">↶</button>
+      <button type="button" class="yze-action-widget__tool" data-collapse aria-controls="${WIDGET_ID}-actions ${WIDGET_ID}-body"></button>
     </div>
     <div class="yze-action-widget__actions"></div>
   `;
 
   const actions = element.querySelector(".yze-action-widget__actions");
+  actions.id = `${WIDGET_ID}-actions`;
   actions.append(
     createActionButton(
       FAST_ACTION,
@@ -581,15 +594,51 @@ function createActionWidget() {
   );
 
   const body = document.createElement("div");
+  body.id = `${WIDGET_ID}-body`;
   body.className = "yze-action-widget__body";
-  const panel = createEquipmentPanel({ operations: equipmentOperations, onLayout() {
+  const onLayout = () => {
     if (!element.isConnected || element.hidden) return;
     const rect = element.getBoundingClientRect();
     const position = clampWidgetPosition(element, rect.left, rect.top);
     element.style.left = `${position.left}px`;
     element.style.top = `${position.top}px`;
+  };
+  const updateCollapseButton = () => {
+    const collapsed = element.classList.contains("is-collapsed");
+    const button = element.querySelector("[data-collapse]");
+    button.textContent = collapsed ? "▾" : "▴";
+    const label = collapsed ? "Раскрыть виджет" : "Свернуть виджет";
+    button.title = button.ariaLabel = label + (button.classList.contains("has-pending-operation") ? ". Есть незавершённая операция" : "");
+    button.setAttribute("aria-expanded", String(!collapsed));
+  };
+  const setCollapsed = (collapsed, persist = true) => {
+    element.classList.toggle("is-collapsed", collapsed);
+    body.hidden = collapsed;
+    actions.hidden = collapsed || !game.combat?.started;
+    updateCollapseButton();
+    onLayout();
+    if (persist) game.settings.set(MODULE_ID, WIDGET_COLLAPSED_SETTING, collapsed)
+      .catch(error => warn("Could not save widget disclosure state", error));
+  };
+  const panel = createEquipmentPanel({ operations: equipmentOperations, onLayout, onControlsChange(controls) {
+    const swap = element.querySelector("[data-swap-hands]");
+    swap.hidden = !controls.available; swap.disabled = controls.swapDisabled;
+    const undo = element.querySelector("[data-undo]");
+    undo.hidden = !controls.undoVisible; undo.disabled = controls.undoDisabled;
+    undo.title = controls.undoReason || "Отменить последнюю операцию: вернуть экипировку и её стоимость";
+    // A collapsed widget must still expose an interrupted operation to its owner.
+    element.querySelector("[data-collapse]").classList.toggle("has-pending-operation", controls.pending);
+    updateCollapseButton();
   } });
   equipmentPanels.set(element, panel);
+  element.querySelector("[data-collapse]").addEventListener("click", () => setCollapsed(!element.classList.contains("is-collapsed")));
+  element.querySelector("[data-swap-hands]").addEventListener("click", () => {
+    if (panel.swapHands()) { setCollapsed(false); onLayout(); }
+  });
+  element.querySelector("[data-undo]").addEventListener("click", () => {
+    setCollapsed(false);
+    void panel.undoLast();
+  });
   body.append(panel.element);
   body.append(createCombatReference({
     open: game.settings.get(MODULE_ID, REFERENCE_OPEN_SETTING),
@@ -605,6 +654,7 @@ function createActionWidget() {
     }
   }));
   element.append(body);
+  setCollapsed(Boolean(game.settings.get(MODULE_ID, WIDGET_COLLAPSED_SETTING)), false);
 
   document.body.append(element);
   installWidgetDragging(element);
@@ -657,7 +707,7 @@ function refreshActionWidgetNow() {
   const name = element.querySelector(".yze-action-widget__name");
   if (name) name.textContent = combatant?.name ?? actor.name ?? "Действия";
 
-  element.querySelector(".yze-action-widget__actions").hidden = !game.combat?.started;
+  element.querySelector(".yze-action-widget__actions").hidden = !game.combat?.started || element.classList.contains("is-collapsed");
 
   updateActionButton(element, FAST_ACTION, actorHasActionStatus(actor, FAST_ACTION));
   updateActionButton(element, SLOW_ACTION, actorHasActionStatus(actor, SLOW_ACTION));
@@ -721,6 +771,9 @@ Hooks.once("init", () => {
   game.settings.register(MODULE_ID, REFERENCE_OPEN_SETTING, {
     scope: "client", config: false, type: Boolean, default: false,
   });
+  game.settings.register(MODULE_ID, WIDGET_COLLAPSED_SETTING, {
+    scope: "client", config: false, type: Boolean, default: false,
+  });
   game.settings.register(MODULE_ID, "equipmentOpen", {
     scope: "client", config: false, type: Boolean, default: true,
   });
@@ -780,6 +833,7 @@ Hooks.once("ready", () => {
       },
       refreshActionWidget,
       quickAccess,
+      rolls,
     });
     Hooks.callAll("yzeCombatPermissionFix.apiReady", module.api);
   }
