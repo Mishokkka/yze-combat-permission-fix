@@ -83,7 +83,7 @@ button and is included in its accessible name.
 
 ## Native roll preparation (1.4.0)
 
-`api.rolls` is an additive version-1 bridge for future attack/reaction controls.
+`api.rolls` is an additive version-1 native bridge. Since 1.5.0, the weapon ribbon uses it for attacks; reaction UI remains a later extension.
 It exposes `getState()` and async `open({kind, actorUuid, itemId?, expectedRevision?})`.
 Kinds are `attack`, `dodge`, and `parry`. Required `actorUuid` binds the request to
 the currently selected owned character, including synthetic token Actors.
@@ -93,7 +93,7 @@ Item operations require compatible Quick Access and an Item currently in hand.
 Dodge also works without Quick Access. Unsupported system versions, missing
 native methods, broken characters/items and pending equipment operations fail closed.
 
-The bridge returns the native Application after opening the dialog. It never
+The bridge opens the native Application and returns the native Promise, which settles after a roll with `{roll, message}` or rejects on cancellation. It never
 submits a roll or charges YZE actions. Roll Dialog Plus enhances that Application
 through its own render hooks; its current public API has no dialog-opening method.
 See [ROLL_INTEGRATION.md](ROLL_INTEGRATION.md) for confirmation hooks and cost design.
@@ -118,3 +118,19 @@ The legacy bridge intentionally remains an equipment-only API; forwarding a
 command through it never silently charges actions. Paid commands are currently
 exposed through the built-in UI. Other integrations should retain the existing
 bridge contract and inspect additive capabilities before adopting new methods.
+
+## Weapon operations (1.5.0)
+
+Requires QA heldItemPresentation plus equipmentControls. Equipment/roll API major versions remain 1. Optional `api.weapons.request(payload)` is a low-level journal protocol, not a roll/weapon formula API.
+
+Authenticated QA channel `yze-widget.weapon` validates OWNER and executes at the active GM. Paid work requires GM. Costs: free/fast/slow/both. Starts include stable id, actorUuid, itemId, equipmentRevision, weaponRevision and combat {id, round} or null. Reload/progress include mode load/topOff, progressRevision, integer current/target/amount (0–999, target 1–999), unit steps/seconds.
+
+Kinds: progress (free counter-only edit), reload (one paid step), prepareAttack/reserveAttack/confirmAttack (actual messageId), resume/cancel, resolveDone/resolveNotDone (explicit uncertain external-result recovery). prepareAttack does not itself roll; the built-in controller binds an intent to the exact native Application before reserve/confirm.
+
+Module-owned Actor flags: weaponOperation (v1 journal), weaponReload (per-Item/mode progress), weaponReceipts (last 32 terminal journals). Deleted-Item progress is pruned on writes. Weapon effects carry their own operation tag. Weapon/equipment/manual marks share enqueueActorOperation; original round-transition transport stays separate.
+
+Unfinished work blocks new mutations. Phase external is saved before the public FL API call; an uncertain result cannot be dispatched again by resume/cancel until the user explicitly resolves it. There is no foreign-API idempotency key or common transaction across Actor/Effects/ammo documents. Manual macros/GM writes are outside the queue.
+
+Client settings: weaponRibbonLayout (floating/side/below), weaponRibbonPosition, weaponRibbonPinned (default false). Full collapse hides weapons unless floating pin is enabled. Equipment remains QA-owned.
+
+Internal optional intentId on rolls.open synchronously tags the Application options via temporary getRollOptions wrapping. The sheet method is restored immediately, and unknown deferred wrappers cannot borrow another dialog. The native Promise settles after a roll/cancel; it does not return Application immediately.

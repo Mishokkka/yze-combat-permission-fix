@@ -1,5 +1,5 @@
 import { getQuickAccessEquipmentApi } from "./quick-access-bridge.js";
-import { supportsEquipmentControls, readEquipmentOperation, hasActionStatus, equipmentUndoError } from "./equipment-operations.js";
+import { supportsEquipmentControls, readEquipmentOperation, hasActionStatus, equipmentUndoError, hasPendingWeaponOperation } from "./equipment-operations.js";
 
 const MODULE_ID = "yze-combat-permission-fix";
 const escape = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -16,6 +16,7 @@ export function createEquipmentPanel({ operations, onLayout, onControlsChange })
   let actor = null, state = null, combat = null, selected = null, slotIndex = null;
   let command = null, cost = "", revision = null, roundKey = "", message = "", busy = false, signature = "";
   let open = Boolean(game.settings.get(MODULE_ID, "equipmentOpen"));
+  let externalHands = false;
 
   const name = id => state?.inventory?.find(item => item.id === id)?.name ??
     state?.slots?.find(slot => slot.itemId === id)?.item?.name ??
@@ -37,7 +38,7 @@ export function createEquipmentPanel({ operations, onLayout, onControlsChange })
     const available = Boolean(actor && state && supportsEquipmentControls());
     const operation = available ? readEquipmentOperation(actor) : null;
     const pending = ["pending", "undoing"].includes(operation?.phase);
-    const blocked = !available || !state.editable || busy || operations.isBusy(actor?.uuid) || pending;
+    const blocked = !available || !state.editable || busy || operations.isBusy(actor?.uuid) || pending || hasPendingWeaponOperation(actor);
     const undoReason = operation?.phase === "complete" ? equipmentUndoError(actor) : "";
     return {
       available, pending,
@@ -63,7 +64,7 @@ export function createEquipmentPanel({ operations, onLayout, onControlsChange })
     const editable = state.editable && !busy && !operations.isBusy(actor.uuid);
     const operation = readEquipmentOperation(actor);
     const pending = ["pending", "undoing"].includes(operation?.phase);
-    const blocked = !editable || pending;
+    const blocked = !editable || pending || hasPendingWeaponOperation(actor);
     const both = state.hands.left && state.hands.left === state.hands.right;
     const handButton = hand => {
       const held = state.hands[hand === "both" ? "left" : hand];
@@ -93,7 +94,7 @@ export function createEquipmentPanel({ operations, onLayout, onControlsChange })
       ${selectedSlot.available ? `<label>Предмет<select data-assign-item aria-label="Предмет для слота"><option value="">Выбрать…</option>${state.inventory.map(i => `<option value="${escape(i.id)}">${escape(i.name)}</option>`).join("")}</select></label><button type="button" data-assign ${blocked ? "disabled" : ""}>Назначить</button>` : ""}
       <label>Переставить в<select data-move-to aria-label="Целевой слот">${state.slots.filter(s => s.available && s.index !== slotIndex).map(s => `<option value="${s.index}">${s.index + 1}: ${escape(s.item?.name ?? "Пусто")}</option>`).join("")}</select></label><button type="button" data-move ${blocked || !state.slots.some(s => s.available && s.index !== slotIndex) ? "disabled" : ""}>Переставить</button>
       <button type="button" data-clear-slot ${blocked || !selectedSlot.itemId ? "disabled" : ""}>Освободить слот</button></details>` : "";
-    element.innerHTML = `<div class="yze-equipment__hands-block"><div class="yze-equipment__hands">${both ? handButton("both") : handButton("left") + handButton("right")}</div></div>${menu}
+    element.innerHTML = `${externalHands ? "" : `<div class="yze-equipment__hands-block"><div class="yze-equipment__hands">${both ? handButton("both") : handButton("left") + handButton("right")}</div></div>`}${menu}
       <details class="yze-equipment__slots" ${open ? "open" : ""}><summary>Быстрый доступ · ${state.capacity} слотов${state.slots.length > state.capacity ? " · есть избыток" : ""}</summary><div class="yze-equipment__grid" style="--equipment-columns:${Math.max(1, Math.ceil(Math.min(state.slots.length, 10) / 2))}">${slots || '<span class="yze-equipment__empty">Нет доступных слотов</span>'}</div>${state.slots.length > 10 ? `<p>Ещё ${state.slots.length - 10} сохранённых привязок. Настройте их на листе.</p>` : ""}${settings}</details>
       ${pending ? `<div class="yze-equipment__recovery" role="alert">${operation.phase === "undoing" ? "Отмена ожидает завершения" : "Операция ожидает завершения"}<div><button type="button" data-resume ${busy ? "disabled" : ""}>Продолжить</button><button type="button" data-cancel ${busy ? "disabled" : ""}>Отменить операцию</button></div></div>` : ""}
       <div class="yze-equipment__message" ${message ? 'role="alert"' : 'aria-live="polite"'}>${escape(busy ? "Применение…" : message)}</div>`;
@@ -180,9 +181,14 @@ export function createEquipmentPanel({ operations, onLayout, onControlsChange })
     else if ((nextState?.revision !== revision || nextRoundKey !== roundKey) && !busy && !operations.isBusy(nextActor?.uuid)) { command = null; cost = ""; selected = null; slotIndex = null; }
     actor = nextActor; state = nextState; combat = nextCombat; revision = state?.revision;
     roundKey = nextRoundKey;
-    const nextSignature = JSON.stringify([actor?.uuid, state, epoch(), readEquipmentOperation(actor), actor && [hasActionStatus(actor, "fastAction"), hasActionStatus(actor, "slowAction")], operations.isBusy(actor?.uuid)]);
+    const nextSignature = JSON.stringify([actor?.uuid, state, epoch(), readEquipmentOperation(actor), hasPendingWeaponOperation(actor), actor && [hasActionStatus(actor, "fastAction"), hasActionStatus(actor, "slowAction")], operations.isBusy(actor?.uuid)]);
     if (nextSignature === signature) return;
     render(); signature = nextSignature;
   }
-  return { element, update, swapHands, undoLast, get busy() { return busy; } };
+  function selectItem(itemId) {
+    if (!actor?.items?.get(itemId) || busy) return false;
+    reset(); selected = itemId; render(); return true;
+  }
+  function setExternalHands(value) { if (externalHands !== value) {externalHands = value; render();} }
+  return { element, update, swapHands, undoLast, selectItem, setExternalHands, get busy() { return busy; } };
 }

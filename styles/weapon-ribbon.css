@@ -1,0 +1,85 @@
+#yze-combat-permission-fix-weapon-ribbon {
+  position: fixed; z-index: 102; display: flex; flex-direction: column; box-sizing: border-box;
+  max-width: calc(100vw - 16px); border: 1px solid #655846; border-radius: 7px;
+  background: #211e19; color: #f0eadf; box-shadow: 0 4px 15px rgba(0,0,0,.35);
+  font: 12px/1.4 var(--font-primary, Arial, sans-serif); overflow: hidden;
+}
+#yze-combat-permission-fix-weapon-ribbon *,
+#yze-combat-permission-fix-weapon-ribbon *::before { box-sizing: border-box; }
+#yze-combat-permission-fix-weapon-ribbon[hidden] { display: none !important; }
+#yze-combat-permission-fix-weapon-ribbon button {
+  color: inherit; background: #302b23; border: 1px solid #655846; border-radius: 4px;
+  font: inherit; min-width: 0; min-height: 24px; width: auto; height: auto; margin: 0; padding: 2px 6px; box-shadow: none;
+}
+#yze-combat-permission-fix-weapon-ribbon button:hover:enabled { background: #41372a; }
+#yze-combat-permission-fix-weapon-ribbon button:disabled { opacity: .45; cursor: default; }
+#yze-combat-permission-fix-weapon-ribbon :is(button, input, select):focus-visible { outline: 2px solid #e5c889; outline-offset: 1px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__handle {
+  flex: 0 0 auto; display: flex; gap: 6px; align-items: center; padding: 4px 7px;
+  color: #c7bcab; background: #2b261f; font-size: 11px; cursor: grab; touch-action: none;
+}
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__handle > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__handle button { font-size: 11px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 6px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__row { padding: 5px 2px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__row + .yze-weapon__row { border-top: 1px solid #554a3c; margin-top: 3px; padding-top: 8px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__main { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 12px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__identity { display: flex; align-items: center; gap: 5px; min-width: 0; flex: 1 1 140px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__identity img { width: 20px; height: 20px; border: 0; object-fit: cover; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__identity .yze-weapon__hand { flex: 0 0 auto; font-size: 11px; padding-inline: 4px; color: #e5c889; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__identity .yze-weapon__name {
+  min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: transparent; border: 0; text-align: left; padding: 0; font-size: 13px;
+}
+#yze-combat-permission-fix-weapon-ribbon dl { display: flex; gap: 10px; margin: 0; flex: 0 1 auto; flex-wrap: wrap; }
+#yze-combat-permission-fix-weapon-ribbon dl + dl { border-left: 1px solid #655846; padding-left: 12px; }
+#yze-combat-permission-fix-weapon-ribbon :is(dt,dd) { margin: 0; }
+#yze-combat-permission-fix-weapon-ribbon dt { color: #c7bcab; font-size: 11px; }
+#yze-combat-permission-fix-weapon-ribbon dd { color: #f0eadf; font-size: 13px; font-variant-numeric: tabular-nums; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__loading dd { color: #e5c889; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__footer { display: flex; flex-wrap: wrap; gap: 5px 12px; justify-content: space-between; align-items: center; margin-top: 6px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__traits { display: flex; flex: 1 1 auto; flex-wrap: wrap; gap: 3px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__traits button { font-size: 11px; background: transparent; border-color: #554a3c; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__traits button span { color: #e5c889; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__commands { display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: 4px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__commands button { border-color: #a98f56; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__drawer { padding: 8px; margin-top: 7px; background: #2b261f; border: 1px solid #655846; border-radius: 5px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__drawer-head { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__drawer-head strong { min-width: 0; flex: 1; overflow-wrap: anywhere; font-weight: 600; }
+#yze-combat-permission-fix-weapon-ribbon p { margin: 4px 0 8px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__description { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+#yze-combat-permission-fix-weapon-ribbon small { color: #c7bcab; font-size: 11px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__numbers { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 6px; }
+#yze-combat-permission-fix-weapon-ribbon label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; min-width: 0; }
+#yze-combat-permission-fix-weapon-ribbon :is(input,select) {
+  color-scheme: dark; color: #f0eadf; background: #211e19; border: 1px solid #73644f; border-radius: 3px;
+  min-width: 0; width: 100%; height: 28px; font: inherit; padding: 2px 5px;
+}
+#yze-combat-permission-fix-weapon-ribbon option { color: #f0eadf; background: #211e19; }
+#yze-combat-permission-fix-weapon-ribbon option:disabled { color: #aaa294; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__manual { display: flex; flex-wrap: wrap; gap: 5px 8px; align-items: center; margin: 7px 0; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__manual span { font-size: 11px; color: #c7bcab; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__payment { display: flex; align-items: flex-end; gap: 8px; margin-top: 8px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__payment label { flex: 1; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__payment > button { min-height: 28px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__preview { font-size: 11px; color: #e5c889; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__progress { display: flex; gap: 9px; align-items: center; margin-top: 6px; font-size: 11px; }
+#yze-combat-permission-fix-weapon-ribbon progress { flex: 1; min-width: 60px; height: 6px; border: 0; appearance: none; background: #443a2c; border-radius: 3px; }
+#yze-combat-permission-fix-weapon-ribbon progress::-webkit-progress-bar { background: #443a2c; border-radius: 3px; }
+#yze-combat-permission-fix-weapon-ribbon progress::-webkit-progress-value { background: #c9ab69; border-radius: 3px; }
+#yze-combat-permission-fix-weapon-ribbon progress::-moz-progress-bar { background: #c9ab69; border-radius: 3px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__recovery { margin-top: 7px; padding: 7px; border: 1px solid #a98f56; border-radius: 4px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__recovery > div,
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__inspect-tools { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__message,
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__warning { color: #ffaaa0; overflow-wrap: anywhere; }
+@media(max-width: 480px) {
+  #yze-combat-permission-fix-weapon-ribbon .yze-weapon__identity { flex-basis: 100%; }
+  #yze-combat-permission-fix-weapon-ribbon .yze-weapon__numbers { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  #yze-combat-permission-fix-weapon-ribbon dl + dl { padding-left: 0; border-left: 0; }
+  #yze-combat-permission-fix-weapon-ribbon .yze-weapon__payment { flex-wrap: wrap; }
+}
+@media(pointer: coarse) {
+  #yze-combat-permission-fix-weapon-ribbon :is(button,input,select) { min-height: 44px; }
+  #yze-combat-permission-fix-weapon-ribbon :is(input,select) { font-size: 16px; }
+}

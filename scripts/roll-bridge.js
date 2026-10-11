@@ -44,7 +44,7 @@ export function createRollBridge({ getActor, getEquipmentState, isBusy = () => f
       available, dodge: available, items, rollDialogPlus: dialogSupport(),
     };
   }
-  async function open({ kind, actorUuid, itemId, expectedRevision } = {}) {
+  async function open({ kind, actorUuid, itemId, expectedRevision, intentId } = {}) {
     if (!["attack", "dodge", "parry"].includes(kind)) throw new Error("Неизвестный вид броска.");
     const { actor, available, equipment } = context();
     if (!available) throw new Error("Броски недоступны для текущего персонажа или версии системы.");
@@ -62,7 +62,22 @@ export function createRollBridge({ getActor, getEquipmentState, isBusy = () => f
     if (!canUseItem(item, kind)) throw new Error("Этот предмет не подходит для выбранного броска.");
     if (kind === "parry") return actor.sheet.rollAction("parry", itemId);
     if (typeof actor.sheet.rollGear !== "function") throw new Error("Системный бросок оружия недоступен.");
-    return actor.sheet.rollGear(itemId);
+    if (intentId === undefined) return actor.sheet.rollGear(itemId);
+    if (typeof intentId !== "string" || !/^[a-zA-Z0-9_-]{1,56}$/.test(intentId) || typeof actor.sheet.getRollOptions !== "function") throw new Error("Диалог не поддерживает намерение атаки.");
+    const sheet = actor.sheet, own = Object.getOwnPropertyDescriptor(sheet, "getRollOptions"), getOptions = sheet.getRollOptions;
+    const tagged = function (...args) { return {...getOptions.apply(this, args), yzeWidgetIntent: intentId}; };
+    sheet.getRollOptions = tagged;
+    try {
+      // FBL 13.0.5 and FL Firearms 0.4.x build options synchronously on entry.
+      // The tag lives on this Application's options. Never leave a sheet-wide
+      // tag armed while waiting for a roll/cancellation or another sheet click.
+      return sheet.rollGear(itemId);
+    } finally {
+      if (sheet.getRollOptions === tagged) {
+        if (own) Object.defineProperty(sheet, "getRollOptions", own);
+        else delete sheet.getRollOptions;
+      }
+    }
   }
   return Object.freeze({ apiVersion: 1, getState, open });
 }

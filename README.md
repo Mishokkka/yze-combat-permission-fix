@@ -1,6 +1,6 @@
 # YZE Combat: Permission Fix + Action Widget
 
-Version 1.4.0
+Version 1.5.0
 
 Target environment:
 
@@ -175,6 +175,15 @@ game.modules.get("yze-combat-permission-fix").api
 
 ## Changelog
 
+### 1.5.0
+
+- Add a separate compact weapon ribbon with grouped stats/ammo, expandable traits and native attack, load and +1 top-off controls. Floating, side and below layouts are client settings; explicit pinning retains floating weapons when the main widget is collapsed.
+- Let players choose the price, current/total progress, progress per operation and steps/seconds; retain progress between rounds. Manual correction spends neither actions nor ammunition.
+- Bind paid attacks to the exact native dialog and ChatMessage, preserve FL Firearms/RDP wrappers, deduplicate submission/payment and refund only the operation’s own effects on cancellation.
+- Share authority serialization with equipment/manual widget marks. Persist weapon journals, recovery and receipts; do not retry ambiguous external ammo writes.
+- Support FL Firearms 0.4.6 void results by checking the normalized magazine postimage, and structured results in 0.4.7. Preserve standalone widget controls and the original round permission fix.
+
+
 ### 1.3.0
 
 - Ship the agreed compact equipment controls with persistent collapsible slots,
@@ -196,3 +205,21 @@ game.modules.get("yze-combat-permission-fix").api
 - Settle failed socket sends immediately so a retry is not blocked by a timer.
 - Correct the equipment example to select an eligible nonempty slot.
 - Add 9 behavioral permission/round-transition regressions (15 tests total).
+
+## Weapon ribbon and reload progress (1.5.0)
+
+With **Quick Access 1.7.30+**, held Items move into a separate compact ribbon. Identity/grip, attack stats, ammo, traits and commands have distinct groups. Click a trait for its description, the Item name for sheet/grip controls, and +N for more traits. Absent data is hidden.
+
+Client setting **Weapon ribbon placement** chooses floating (default), side or below. Drag the floating header to save position. Full main collapse hides weapons unless **Закрепить** is explicitly enabled. Narrow screens wrap groups and scroll details internally.
+
+**Атака** requires an explicit price in combat and opens the native dialog, enhanced by RDP when active. Opening/cancelling before submit is free. Confirmation reserves native YZE effects once and invokes the existing system/FL Firearms backend. Push/duplicate submit never charge again; no extra ammo deduction is added. See [ROLL_INTEGRATION.md](ROLL_INTEGRATION.md).
+
+**Зарядить / Дозарядить** opens current progress, total, progress per action and steps/seconds. Account for abilities manually: e.g. 0/4 with 2 per operation advances to 2/4, then 4/4. Each step has its own selected price; progress survives rounds/reloads. Seconds are a manual counter, not a timer.
+
+**Сохранить прогресс вручную** changes only the counter, without actions/ammo. Setting the goal does not itself load ammo; explicitly perform the final step (zero is allowed at the goal). At completion, MAG load fills the magazine through FL Firearms loadMagazine; TopOff adds **one** round through its API and requires the matching property. Ammo/resource dialogs remain FL-owned. Non-MAG and ordinary slow-reload weapons have manual progress, with no invented loaded flag or arrow consumption.
+
+Paid work needs an active GM. Changed weapon, grip, progress or round invalidates an open draft. Weapon/equipment/manual marks share a queue, separate from the original round fix. Uncertain external load: inspect magazine and ammo resource, then select **Зарядка выполнена** or **Не выполнена**. Such a call is never automatically repeated; completed ammo loads are not automatically reversed.
+
+FL Firearms **0.4.6–0.4.7** are supported. Legacy void returns require an exact normalized magazine postimage; ambiguous/no-op results require recovery. This release does not update that third module.
+
+Browser weapon check: set QA_SOURCE, FBL_SOURCE (local 13.0.5 bundle), PLAYWRIGHT_MODULE and CHROME_PATH, then run `node dev-tests/browser-weapons.mjs`. Actual FBL handler/method are used; Documents, transport, dice and firearm writes are mocked. Live GM/player acceptance: cancel/confirm attack, Push, multi-round load, top-off, manual progress, collapse/pin and end the last turn.
