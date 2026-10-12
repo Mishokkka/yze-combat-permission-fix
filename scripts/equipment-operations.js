@@ -53,7 +53,7 @@ export function requireSameRound(operation, actor) {
 
 async function saveOperation(actor, operation, guard) {
   guard();
-  if (!await actor.update({ [`flags.${MODULE_ID}.${OPERATION_FLAG}`]: operation }, { render: false, fblqaEquipmentOnly: true })) {
+  if (!await actor.update({ [`flags.${MODULE_ID}.==${OPERATION_FLAG}`]: operation }, { render: false, fblqaEquipmentOnly: true })) {
     throw new Error("Запись операции отменена. Перечитайте состояние персонажа.");
   }
 }

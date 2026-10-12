@@ -1,6 +1,7 @@
 import { getQuickAccessEquipmentApi } from "./quick-access-bridge.js";
 import { hasActionStatus, hasPendingWeaponOperation, readEquipmentOperation } from "./equipment-operations.js";
 import { ACTION_COSTS, getReloadProgress, readWeaponOperation, supportsWeaponControls } from "./weapon-operations.js";
+import {getReloadRequirement, paidReloadAmount, RELOAD_UNITS} from "./reload-rules.js";
 
 const MODULE = "yze-combat-permission-fix";
 const escape = value => String(value ?? "").replace(/[&<>"']/g, char => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[char]));
@@ -40,13 +41,25 @@ export function createWeaponRibbon({operations, attacks, onGrip, onPendingChange
       </div>
       <div class="yze-weapon__footer"><div class="yze-weapon__traits" aria-label="Свойства">${features.map(feature => `<button type="button" data-weapon-property="${escape(feature.key)}" data-weapon-id="${escape(weapon.itemId)}">${escape(feature.label)}${feature.value ? ` <span>${escape(feature.value)}</span>` : ""}</button>`).join("")}${weapon.features.length > 2 ? `<button type="button" data-weapon-more="${escape(weapon.itemId)}" aria-expanded="${expanded.has(weapon.itemId)}">${expanded.has(weapon.itemId) ? "Скрыть" : `+${weapon.features.length - 2}`}</button>` : ""}</div>
       <div class="yze-weapon__commands" aria-label="Действия оружия">${weapon.attack ? `<button type="button" data-weapon-action="attack" data-weapon-id="${escape(weapon.itemId)}" ${blocked() || !actor.canAct ? "disabled" : ""}>Атака</button>` : ""}${weapon.reload ? `<button type="button" data-weapon-action="load" data-weapon-id="${escape(weapon.itemId)}" ${blocked() ? "disabled" : ""}>Зарядить</button>` : ""}${gun?.topOff ? `<button type="button" data-weapon-action="topOff" data-weapon-id="${escape(weapon.itemId)}" ${blocked() ? "disabled" : ""}>Дозарядить</button>` : ""}</div></div>
-      ${active ? `<div class="yze-weapon__progress"><span>${active.mode}: ${active.current}/${active.target} ${active.unit === "seconds" ? "сек." : "шаг."}</span><progress max="${active.target}" value="${active.current}" aria-label="${active.mode}"></progress></div>` : ""}
+      ${active ? `<div class="yze-weapon__progress"><span>${active.mode}: ${active.current}/${active.target} ${RELOAD_UNITS[active.unit]}</span><progress max="${active.target}" value="${active.current}" aria-label="${active.mode}"></progress></div>` : ""}
     </article>`;
   }
 
   function costSelect() {
     if (!combat?.started) return '<span class="yze-weapon__outside">Вне боя · без траты</span>';
-    return `<label>Стоимость<select data-weapon-cost><option value="">Выбрать…</option>${Object.entries(costLabels).map(([value, label]) => `<option value="${value}" ${draft.cost === value ? "selected" : ""} ${!canPay(value) ? "disabled" : ""}>${label}${canPay(value) ? "" : " · потрачено"}</option>`).join("")}</select></label>`;
+    return `<label>Стоимость<select data-weapon-cost><option value="">Выбрать…</option>${Object.entries(costLabels).map(([value, label]) => {
+      const amount = draft.automatic ? paidReloadAmount(draft.unit, value) : null;
+      const incompatible = drawer?.kind !== "attack" && value === "fast" && draft.unit === "slow";
+      const reason = !canPay(value) ? " · потрачено" : incompatible ? " · не заменяет S" : amount === 0 ? " · не продвигает" : amount ? ` · +${amount} ${RELOAD_UNITS[draft.unit]}` : "";
+      return `<option value="${value}" ${draft.cost === value ? "selected" : ""} ${!canPay(value) || incompatible || amount === 0 ? "disabled" : ""}>${label}${reason}</option>`;
+    }).join("")}</select></label>`;
+  }
+  function reloadForm(weapon, action) {
+    const {raw, requirement} = getReloadRequirement(weapon, action);
+    const rule = draft.unit === "seconds" ? "Оба действия = 10 секунд. Отдельное F или S не даёт полного шага." : draft.unit === "fast" ? "Быстрое или основное = 1F; оба = 2F." : draft.unit === "slow" ? "Основное = 1S. Быстрое не заменяет основное." : "Укажите величину шага вручную.";
+    const hint = draft.automatic || draft.unit === "steps" ? rule : `Ручной шаг для способности. Базовое правило: ${rule}`;
+    const labels = {steps: "Ручные шаги", fast: "Быстрые (F)", slow: "Основные (S)", seconds: "Секунды"};
+    return `<div class="yze-weapon__rule"><span>${requirement ? `По предмету: ${requirement.target} ${RELOAD_UNITS[requirement.unit]}` : raw ? `Формат «${escape(raw)}» не распознан; задайте вручную.` : "Длительность не задана; используйте ручной шаг."}</span><label>Учёт шага<select data-weapon-calculation><option value="auto" ${draft.automatic ? "selected" : ""} ${draft.unit === "steps" || !combat?.started ? "disabled" : ""}>По выбранным действиям</option><option value="manual" ${!draft.automatic ? "selected" : ""}>Вручную / способность</option></select></label><small>${hint}</small></div><div class="yze-weapon__numbers"><label>Прогресс<input type="number" data-weapon-input="current" min="0" max="999" step="1" value="${draft.current}"></label><label>Всего<input type="number" data-weapon-input="target" min="1" max="999" step="1" value="${draft.target}"></label><label>За операцию<input type="number" data-weapon-input="amount" min="0" max="999" step="1" value="${draft.amount}" ${draft.automatic ? "disabled" : ""}></label><label>Единицы<select data-weapon-unit>${Object.entries(labels).map(([value, label]) => `<option value="${value}" ${draft.unit === value ? "selected" : ""}>${label}</option>`).join("")}</select></label></div><div class="yze-weapon__manual"><button type="button" data-weapon-save-progress ${blocked() ? "disabled" : ""}>Сохранить прогресс вручную</button><span>Без расхода действий и боеприпасов</span></div><div class="yze-weapon__preview" aria-live="polite"></div>`;
   }
   function drawerHtml() {
     const weapon = item(drawer?.itemId);
@@ -63,7 +76,7 @@ export function createWeaponRibbon({operations, attacks, onGrip, onPendingChange
       content = `<p>Хват: ${weapon.hand === "both" ? "обе руки" : weapon.hand === "left" ? "левая рука" : "правая рука"}${weapon.requiredGrip ? ` · Требуемый хват: ${escape(weapon.requiredGrip)}` : ""}</p><div class="yze-weapon__inspect-tools"><button type="button" data-weapon-open="${escape(weapon.itemId)}">Открыть предмет</button><button type="button" data-weapon-grip="${escape(weapon.itemId)}">Изменить хват</button></div>`;
     } else {
       label = `${action === "attack" ? "Атака" : action === "topOff" ? "Дозарядка" : "Зарядка"} · ${weapon.name}`;
-      content = action === "attack" ? '<p>Параметры броска выбираются в штатном диалоге. Отмена окна не тратит действие.</p>' : `<div class="yze-weapon__numbers"><label>Прогресс<input type="number" data-weapon-input="current" min="0" max="999" step="1" value="${draft.current}"></label><label>Всего<input type="number" data-weapon-input="target" min="1" max="999" step="1" value="${draft.target}"></label><label>За действие<input type="number" data-weapon-input="amount" min="0" max="999" step="1" value="${draft.amount}"></label><label>Единицы<select data-weapon-unit><option value="steps" ${draft.unit === "steps" ? "selected" : ""}>Шаги</option><option value="seconds" ${draft.unit === "seconds" ? "selected" : ""}>Секунды</option></select></label></div><div class="yze-weapon__manual"><button type="button" data-weapon-save-progress ${blocked() ? "disabled" : ""}>Сохранить прогресс вручную</button><span>Без расхода действий и боеприпасов</span></div><div class="yze-weapon__preview" aria-live="polite"></div>`;
+      content = action === "attack" ? '<p>Параметры броска выбираются в штатном диалоге. Отмена окна не тратит действие.</p>' : reloadForm(weapon, action);
       content += `<div class="yze-weapon__payment">${costSelect()}<button type="button" data-weapon-execute>${action === "attack" ? "Открыть бросок" : "Выполнить шаг"}</button></div>`;
     }
     return `<div class="yze-weapon__drawer"><div class="yze-weapon__drawer-head"><strong>${escape(label)}</strong><button type="button" data-weapon-close aria-label="Закрыть подробности">×</button></div>${content}</div>`;
@@ -79,14 +92,20 @@ export function createWeaponRibbon({operations, attacks, onGrip, onPendingChange
 
   function refreshForm() {
     if (!draft || !drawer || !["attack", "load", "topOff"].includes(drawer.kind)) return;
+    if (draft.automatic) {
+      draft.amount = paidReloadAmount(draft.unit, draft.cost);
+      const input = element.querySelector('[data-weapon-input="amount"]');
+      if (input) input.value = draft.cost ? draft.amount : "";
+    }
     const numbers = [draft.current, draft.target, draft.amount];
-    const valid = drawer.kind === "attack" || numbers.every(Number.isSafeInteger) && draft.target >= 1 && draft.target <= 999 && draft.current >= 0 && draft.current <= draft.target && draft.amount >= 0 && draft.amount <= 999 && (draft.amount > 0 || draft.current === draft.target);
+    const aligned = !draft.automatic || draft.unit !== "seconds" || !(draft.current % 10 || draft.target % 10);
+    const valid = drawer.kind === "attack" || aligned && numbers.every(Number.isSafeInteger) && draft.target >= 1 && draft.target <= 999 && draft.current >= 0 && draft.current <= draft.target && draft.amount >= 0 && draft.amount <= 999 && (draft.amount > 0 || !draft.automatic && draft.current === draft.target);
     const button = element.querySelector("[data-weapon-execute]");
-    if (button) button.disabled = blocked() || !valid || combat?.started && (!draft.cost || !canPay(draft.cost));
+    if (button) button.disabled = blocked() || !valid || drawer.kind !== "attack" && draft.unit === "slow" && draft.cost === "fast" || combat?.started && (!draft.cost || !canPay(draft.cost));
     const manual = element.querySelector("[data-weapon-save-progress]");
     if (manual) manual.disabled = blocked() || !Number.isSafeInteger(draft.current) || !Number.isSafeInteger(draft.target) || draft.target < 1 || draft.target > 999 || draft.current < 0 || draft.current > draft.target;
     const preview = element.querySelector(".yze-weapon__preview");
-    if (preview) preview.textContent = valid ? `После шага: ${Math.min(draft.target, draft.current + draft.amount)}/${draft.target}${draft.current + draft.amount >= draft.target ? " · завершение зарядки" : ""}` : "Проверьте числовые значения";
+    if (preview) preview.textContent = valid ? `После шага: ${Math.min(draft.target, draft.current + draft.amount)}/${draft.target} ${RELOAD_UNITS[draft.unit]}${draft.current + draft.amount >= draft.target ? " · завершение зарядки" : ""}` : draft.automatic && !draft.amount ? "Выберите подходящую стоимость или ручной шаг для способности." : !aligned ? "Секундный шаг кратен 10; для способности выберите ручной режим." : "Проверьте числовые значения";
   }
 
   function render() {
@@ -117,7 +136,7 @@ export function createWeaponRibbon({operations, attacks, onGrip, onPendingChange
   function launchPayload(kind) {
     const weapon = item(drawer.itemId);
     return {kind, itemId: weapon.itemId, mode: drawer.kind, ...drawer.snapshot,
-      cost: combat?.started ? draft.cost : "free", current: draft.current, target: draft.target, amount: draft.amount, unit: draft.unit};
+      cost: combat?.started ? draft.cost : "free", calculation: kind === "progress" || !draft.automatic ? "manual" : "auto", current: draft.current, target: draft.target, amount: draft.amount, unit: draft.unit};
   }
 
   element.addEventListener("input", event => {
@@ -127,7 +146,8 @@ export function createWeaponRibbon({operations, attacks, onGrip, onPendingChange
   element.addEventListener("change", event => {
     if (!draft) return;
     if (event.target.matches("[data-weapon-cost]")) draft.cost = event.target.value;
-    if (event.target.matches("[data-weapon-unit]")) draft.unit = event.target.value;
+    if (event.target.matches("[data-weapon-unit]")) {draft.unit = event.target.value; draft.automatic = false; render(); return;}
+    if (event.target.matches("[data-weapon-calculation]")) {draft.automatic = event.target.value === "auto"; render(); return;}
     refreshForm();
   });
   element.addEventListener("click", event => {
@@ -147,7 +167,10 @@ export function createWeaponRibbon({operations, attacks, onGrip, onPendingChange
       drawer = {kind: button.dataset.weaponAction, itemId: button.dataset.weaponId};
       const weapon = item(drawer.itemId), progress = getReloadProgress(actor, weapon, drawer.kind);
       drawer.snapshot = {equipmentRevision: presentation.equipmentRevision, weaponRevision: weapon.revision, progressRevision: progress.revision, combat: epoch()};
-      draft = {cost: "", current: progress.finished ? 0 : progress.current, target: progress.target, amount: 1, unit: progress.unit};
+      const {requirement} = getReloadRequirement(weapon, drawer.kind);
+      const current = progress.finished ? 0 : progress.current;
+      const automatic = drawer.kind !== "attack" && Boolean(combat?.started && progress.unit !== "steps" && (progress.calculation === "auto" || !progress.calculation && requirement && progress.unit === requirement.unit) && (progress.unit !== "seconds" || !(current % 10 || progress.target % 10)));
+      draft = {cost: "", current, target: progress.target, amount: progress.amount ?? (progress.unit === "seconds" ? 10 : 1), unit: progress.unit, automatic};
     } else if (button.hasAttribute("data-weapon-save-progress")) {void apply(launchPayload("progress")); return;}
     else if (button.hasAttribute("data-weapon-recover")) {
       const operation = readWeaponOperation(actor);

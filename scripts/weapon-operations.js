@@ -1,5 +1,6 @@
 import { getQuickAccessEquipmentApi } from "./quick-access-bridge.js";
 import { enqueueActorOperation, hasActionStatus, readEquipmentOperation, supportsEquipmentControls, requireSameRound, createPaidEffect, removePaidEffects, effectsFor } from "./equipment-operations.js";
+import {getReloadRequirement, paidReloadAmount, RELOAD_UNITS} from "./reload-rules.js";
 
 const MODULE = "yze-combat-permission-fix";
 export const WEAPON_OPERATION = "weaponOperation";
@@ -30,12 +31,15 @@ function integer(value, min, max) { return Number.isSafeInteger(value) && value 
 export function getReloadProgress(actor, item, mode = "load") {
   const raw = storedReload(actor, item.itemId, mode);
   const value = item.firearm?.reloadValue;
-  const suggested = mode === "load" && /^\d+$/.test(value ?? "") && integer(Number(value), 1, 999) ? Number(value) : 1;
+  const {requirement} = getReloadRequirement(item, mode);
+  const suggested = requirement?.target ?? (mode === "load" && /^\d+$/.test(value ?? "") && integer(Number(value), 1, 999) ? Number(value) : 1);
   const valid = raw?.version === 1 && integer(raw.target, 1, 999) && integer(raw.current, 0, raw.target);
   return {
     target: valid ? raw.target : suggested, current: valid ? raw.current : 0,
-    unit: valid && ["steps", "seconds"].includes(raw.unit) ? raw.unit : item.firearm?.reloadType === "S" ? "seconds" : "steps",
+    unit: valid && Object.hasOwn(RELOAD_UNITS, raw.unit) ? raw.unit : requirement?.unit ?? (item.firearm?.reloadType === "S" ? "seconds" : "steps"),
     finished: valid && raw.finished === true, revision: JSON.stringify(raw),
+    calculation: valid && ["manual", "auto"].includes(raw.calculation) ? raw.calculation : null,
+    amount: valid && integer(raw.amount, 1, 999) ? raw.amount : null,
   };
 }
 
@@ -70,8 +74,8 @@ export function createWeaponOperations({ getApi = getQuickAccessEquipmentApi, re
 
   async function save(actor, operation, guard, progress) {
     guard();
-    const update = {[`flags.${MODULE}.${WEAPON_OPERATION}`]: operation};
-    if (progress !== undefined) update[`flags.${MODULE}.${RELOAD_FLAG}`] = progress;
+    const update = {[`flags.${MODULE}.==${WEAPON_OPERATION}`]: operation};
+    if (progress !== undefined) update[`flags.${MODULE}.==${RELOAD_FLAG}`] = progress;
     if (terminal(operation)) update[`flags.${MODULE}.${RECEIPTS}`] = [...allReceipts(actor).filter(entry => entry.id !== operation.id).slice(-31), clone(operation)];
     const result = await actor.update(update, {render: false, fblqaEquipmentOnly: true});
     if (!result || !same(readWeaponOperation(actor), operation)) throw new Error("Запись операции не подтверждена. Проверьте состояние.");
@@ -124,7 +128,9 @@ export function createWeaponOperations({ getApi = getQuickAccessEquipmentApi, re
     const starting = ["reload", "progress", "prepareAttack"].includes(payload.kind);
     if (starting) {
       const receipt = allReceipts(actor).find(entry => entry.id === payload.id);
-      const fingerprint = JSON.stringify([payload.kind, payload.itemId, payload.mode, payload.cost, payload.target, payload.current, payload.amount, payload.unit, payload.combat ?? null]);
+      const parts = [payload.kind, payload.itemId, payload.mode, payload.cost, payload.target, payload.current, payload.amount, payload.unit, payload.combat ?? null];
+      if (payload.calculation !== undefined) parts.push(payload.calculation);
+      const fingerprint = JSON.stringify(parts);
       if (receipt) {
         if (receipt.fingerprint !== fingerprint) throw new Error("Идентификатор уже использован для другой операции.");
         return {operation: clone(receipt), replayed: true};
@@ -151,12 +157,24 @@ export function createWeaponOperations({ getApi = getQuickAccessEquipmentApi, re
           if (!["load", "topOff"].includes(mode) || mode === "load" && !item.reload || mode === "topOff" && !item.firearm?.topOff) throw new Error("Эта перезарядка недоступна.");
           const previous = getReloadProgress(actor, item, mode);
           if (previous.revision !== payload.progressRevision) throw new Error("Прогресс уже изменился.");
-          if (!integer(payload.target, 1, 999) || !["steps", "seconds"].includes(payload.unit)) throw new Error("Укажите от 1 до 999 шагов или секунд.");
+          if (!integer(payload.target, 1, 999) || !Object.hasOwn(RELOAD_UNITS, payload.unit)) throw new Error("Укажите от 1 до 999 шагов, секунд или действий F/S.");
           const current = payload.current ?? (previous.finished ? 0 : previous.current);
-          if (!integer(current, 0, payload.target) || payload.kind === "reload" && (!integer(payload.amount, 0, 999) || payload.amount === 0 && current < payload.target)) throw new Error("Некорректный прогресс перезарядки.");
+          const calculation = payload.calculation ?? "manual";
+          if (!["auto", "manual"].includes(calculation)) throw new Error("Выберите способ учёта прогресса.");
+          if (payload.kind === "reload" && payload.unit === "slow" && cost === "fast") throw new Error("Быстрое действие не заменяет основное S.");
+          let amount = payload.amount;
+          if (payload.kind === "reload" && calculation === "auto") {
+            amount = paidReloadAmount(payload.unit, cost);
+            if (!amount) throw new Error("Эта стоимость не продвигает зарядку: выберите подходящее действие или ручной шаг.");
+            if (payload.unit === "seconds" && (current % 10 || payload.target % 10)) throw new Error("Автоматические секунды кратны 10; для способности выберите ручной шаг.");
+          }
+          if (!integer(current, 0, payload.target) || payload.kind === "reload" && (!integer(amount, 0, 999) || amount === 0 && current < payload.target)) throw new Error("Некорректный прогресс перезарядки.");
+          operation.calculation = calculation;
           operation.mode = mode; operation.before = storedReload(actor, item.itemId, mode);
-          operation.after = {version: 1, current: payload.kind === "progress" ? current : Math.min(payload.target, current + payload.amount),
+          operation.after = {version: 1, current: payload.kind === "progress" ? current : Math.min(payload.target, current + amount),
             target: payload.target, unit: payload.unit, finished: false, operationId: operation.id};
+          operation.after.calculation = calculation;
+          if (integer(amount, 1, 999)) operation.after.amount = amount;
           operation.magazine = clone(item.firearm?.magazine ?? null);
           if (payload.kind === "reload" && operation.magazine && operation.magazine.capacity <= 0) throw new Error("У оружия не указана ёмкость магазина.");
           if (payload.kind === "reload" && operation.magazine && operation.magazine.current >= operation.magazine.capacity) throw new Error("Магазин уже полон.");

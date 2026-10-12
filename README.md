@@ -1,6 +1,6 @@
 # YZE Combat: Permission Fix + Action Widget
 
-Version 1.5.0
+Version 1.6.0
 
 Target environment:
 
@@ -175,6 +175,12 @@ game.modules.get("yze-combat-permission-fix").api
 
 ## Changelog
 
+### 1.6.0
+
+- Recognize typed reload counts and TopOff 2F/3S/10 сек; compute progress from explicitly paid F/S pairs, allowing slow-as-fast only.
+- Preserve explicit manual ability steps/mode across rounds and reloads, without converting old manual counters.
+- Replace module-owned operation/progress flags completely under Foundry v13 merging, verify with native helpers, and restore the missing 1.4.0 changelog entry.
+
 ### 1.5.0
 
 - Add a separate compact weapon ribbon with grouped stats/ammo, expandable traits and native attack, load and +1 top-off controls. Floating, side and below layouts are client settings; explicit pinning retains floating weapons when the main widget is collapsed.
@@ -183,6 +189,11 @@ game.modules.get("yze-combat-permission-fix").api
 - Share authority serialization with equipment/manual widget marks. Persist weapon journals, recovery and receipts; do not retry ambiguous external ammo writes.
 - Support FL Firearms 0.4.6 void results by checking the normalized magazine postimage, and structured results in 0.4.7. Preserve standalone widget controls and the original round permission fix.
 
+
+### 1.4.0
+
+- Improve contrast in cost dropdowns, move swap/undo into the compact header, remove redundant labels, and persist full-widget collapse.
+- Prepare native attack/Dodge/Parry calls for Forbidden Lands 13.0.5 and document optional Roll Dialog Plus support.
 
 ### 1.3.0
 
@@ -223,3 +234,33 @@ Paid work needs an active GM. Changed weapon, grip, progress or round invalidate
 FL Firearms **0.4.6–0.4.7** are supported. Legacy void returns require an exact normalized magazine postimage; ambiguous/no-op results require recovery. This release does not update that third module.
 
 Browser weapon check: set QA_SOURCE, FBL_SOURCE (local 13.0.5 bundle), PLAYWRIGHT_MODULE and CHROME_PATH, then run `node dev-tests/browser-weapons.mjs`. Actual FBL handler/method are used; Documents, transport, dice and firearm writes are mocked. Live GM/player acceptance: cancel/confirm attack, Push, multi-round load, top-off, manual progress, collapse/pin and end the last turn.
+
+## F/S and ten-second reload rules (1.6.0)
+
+Unambiguous typed reload values and TopOff notation are recognized: 2F, 3S,
+10 сек. Numeric reloadValue uses Fast/Slow/seconds type. The typed reloadType
+S means seconds; a TopOff suffix 3S means **slow actions**. Conflicting or
+compound text is left for manual input.
+
+| Progress unit | Fast | Slow | Both |
+| --- | --- | --- | --- |
+| F | +1 F | +1 F (slow substitutes) | +2 F |
+| S | Unavailable | +1 S | +1 S; fast adds no S |
+| Seconds | No full step | No full step | +10 seconds |
+
+**По выбранным действиям** computes the amount at the authority. For seconds,
+choose Оба in one operation; single actions are not silently treated as five
+seconds or combined across turns. Current/target must be multiples of ten.
+This is a counter, not a real-time timer.
+
+**Вручную / способность** retains editable current/total/amount/unit. Mode and
+positive manual step persist across rounds/reloads; price is chosen anew.
+Use it for abilities that shorten duration or change useful progress. Fast still
+cannot replace an S unit; use explicit manual steps for separately agreed rules
+without an F/S denomination. Unknown formats and legacy manual counters are
+preserved. Counter-only correction never loads/spends ammo.
+
+Own operation/progress flags now use Foundry v13 whole-value replacement,
+including the equipment journal, so deleted entries and stale operation fields
+do not survive merging. Tests optionally use actual local helpers by setting
+FOUNDRY_HELPERS to common/utils/helpers.mjs. Foundry source is not bundled.

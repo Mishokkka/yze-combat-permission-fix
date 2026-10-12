@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createEquipmentOperations, OPERATION_FLAG, equipmentUndoError } from "../scripts/equipment-operations.js";
+import {applyFlagUpdate} from "./document-flags.mjs";
 
 const MODULE = "yze-combat-permission-fix";
 function fixture() {
@@ -9,12 +10,12 @@ function fixture() {
   let activeGM = gm, nextEffect = 0, handWrites = 0, journalWrites = 0;
   const actor = {
     uuid: "Actor.pc", documentName: "Actor", type: "character", effects: [], hands: { left: null, right: null },
-    statuses: new Set(), owned: true, getFlag: (m,k) => flags[`${m}.${k}`],
+    statuses: new Set(), owned: true, getFlag: (_m,k) => flags[k],
     testUserPermission: user => actor.owned && user.id === owner.id,
     async update(data) {
       journalWrites++;
       if (actor.failJournal?.(journalWrites)) throw new Error("journal unavailable");
-      for (const [key,value] of Object.entries(data)) flags[key.slice(6)] = structuredClone(value);
+      applyFlagUpdate(flags, data, MODULE);
       return actor;
     },
     refreshStatuses() { actor.statuses = new Set(actor.effects.flatMap(e => e.disabled ? [] : [...e.statuses])); },
@@ -72,7 +73,7 @@ function fixture() {
   const recover = kind => execute({kind,id:"op",actorUuid:actor.uuid});
   return {actor,owner,gm,combat,api,engine,payload,execute,recover,flags,receipts,
     get handWrites(){return handWrites;}, get journalWrites(){return journalWrites;},
-    set activeGM(value){activeGM=value;}, operation:()=>flags[`${MODULE}.${OPERATION_FLAG}`]};
+    set activeGM(value){activeGM=value;}, operation:()=>flags[OPERATION_FLAG]};
 }
 
 test("a paid command and its retry write equipment and native cost only once", async () => {

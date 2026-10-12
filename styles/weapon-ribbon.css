@@ -50,6 +50,10 @@
 #yze-combat-permission-fix-weapon-ribbon .yze-weapon__description { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 #yze-combat-permission-fix-weapon-ribbon small { color: #c7bcab; font-size: 11px; }
 #yze-combat-permission-fix-weapon-ribbon .yze-weapon__numbers { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 6px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__rule { display: grid; grid-template-columns: minmax(0,1fr) minmax(120px,1fr); align-items: center; gap: 4px 8px; margin-bottom: 8px; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__rule > span { overflow-wrap: anywhere; }
+#yze-combat-permission-fix-weapon-ribbon .yze-weapon__rule > small { grid-column: 1 / -1; }
+#yze-combat-permission-fix-weapon-ribbon input:disabled { opacity: .65; }
 #yze-combat-permission-fix-weapon-ribbon label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; min-width: 0; }
 #yze-combat-permission-fix-weapon-ribbon :is(input,select) {
   color-scheme: dark; color: #f0eadf; background: #211e19; border: 1px solid #73644f; border-radius: 3px;

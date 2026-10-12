@@ -134,3 +134,21 @@ Unfinished work blocks new mutations. Phase external is saved before the public 
 Client settings: weaponRibbonLayout (floating/side/below), weaponRibbonPosition, weaponRibbonPinned (default false). Full collapse hides weapons unless floating pin is enabled. Equipment remains QA-owned.
 
 Internal optional intentId on rolls.open synchronously tags the Application options via temporary getRollOptions wrapping. The sheet method is restored immediately, and unknown deferred wrappers cannot borrow another dialog. The native Promise settles after a roll/cancel; it does not return Application immediately.
+
+## Reload calculation and persistence (1.6.0)
+
+Units: steps/seconds/fast/slow. Optional calculation is manual (legacy default)
+or auto. Authority derives automatic amount from cost: F accepts fast/slow +1
+or both +2; S rejects fast and accepts slow/both +1; seconds requires both and
+advances ten with current/target multiples of ten. Caller amount cannot increase
+automatic progress. Free advancement uses explicit manual mode; progress edits
+never pay.
+
+calculation and positive amount are stored alongside current/target/unit in
+weaponReload. Manual mode/step survive rounds and reloads; old v1 records need
+no startup migration. Fingerprints retain the old shape when calculation is
+omitted, preserving issued legacy requests.
+
+Whole-record flags are written through flags.yze-combat-permission-fix.==weaponOperation,
+flags.yze-combat-permission-fix.==weaponReload and
+flags.yze-combat-permission-fix.==equipmentOperation, preserving unrelated flags.

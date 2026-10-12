@@ -17,15 +17,15 @@ let bootstrap = legacy.slice(bootstrapStart, legacy.indexOf("\n`;", bootstrapSta
 const extension = `
 Hooks.on=(name,callback)=>{const list=callbacks.get(name)||[];list.push(callback);callbacks.set(name,list);return callback;};
 Hooks.off=(name,callback)=>callbacks.set(name,(callbacks.get(name)||[]).filter(value=>value!==callback));
-game.system.version='13.0.5';module.version='1.5.0';
+game.system.version='13.0.5';module.version='1.6.0';
 game.users.get=id=>game.users.find(user=>user.id===id);
 const presentation=await import('/qa/scripts/integration/weapon-presentation.js');api.getHeldItemPresentation=presentation.getHeldItemPresentation;api.capabilities.heldItemPresentation=true;
-const firearm={current:0,capacity:6,loads:0,topOffs:0,shots:0};
+const firearm={current:0,capacity:6,loads:0,topOffs:0,shots:0,reloadType:'MAG',reloadValue:'',topOffCost:''};
 const gun={id:'gun',uuid:actor.uuid+'.Item.gun',name:'Длинный револьвер',img:actor.items.get('sword').img,type:'weapon',parent:actor,actor,system:{weight:'normal',category:'ranged',bonus:{value:2,max:2},damage:2,range:'near',grip:'1h',features:{}}};
 actor.items.set('gun',gun);
 for(const pc of [actor,other]){pc.canAct=true;for(const item of pc.items.values()){item.parent=pc;item.actor=pc;item.system.bonus??={value:2};item.system.damage??=2;item.system.range??='arm';item.system.features??={edged:true,pointed:true,parrying:true};item.getRollData=()=>({isBroken:false,artifactDie:''});}}
 game.modules.set('fl-firearms',{active:true,version:'0.4.7',api:{
-  getFirearmTooltipData:item=>item.id==='gun'?{isFirearm:true,firearmType:'regular',reloadType:'MAG',magCapacity:6,magCurrent:firearm.current,apOp:'*',apValue:0.5,features:[{key:'Reliable',label:'Надежное',automated:true},{key:'TopOff',label:'Дозарядка',automated:true},{key:'Rapid',label:'Скорострельное',hasInput:true,value:2,automated:false}]}:null,
+  getFirearmTooltipData:item=>item.id==='gun'?{isFirearm:true,firearmType:'regular',reloadType:firearm.reloadType,reloadValue:firearm.reloadValue,magCapacity:6,magCurrent:firearm.current,apOp:'*',apValue:0.5,features:[{key:'Reliable',label:'Надежное',automated:true},{key:'TopOff',label:'Дозарядка',automated:true,hasInput:true,value:firearm.topOffCost},{key:'Rapid',label:'Скорострельное',hasInput:true,value:2,automated:false}]}:null,
   getMagazineProfile:()=>({current:firearm.current,capacity:6}),
   async loadMagazine(){const oldAmmo=firearm.current;firearm.loads++;firearm.current=6;Hooks.callAll('updateItem',gun);return {oldAmmo,newAmmo:6};},
   async topOffMagazine(){const oldAmmo=firearm.current;firearm.topOffs++;firearm.current++;Hooks.callAll('updateItem',gun);return {oldAmmo,newAmmo:firearm.current};},
@@ -47,7 +47,7 @@ actor.sheet.getGear=itemId=>({attribute:{name:'agility',value:3,label:'Agility'}
 actor.sheet.getRollOptions=()=>({actorId:actor.id,actorType:'character',type:'skill'});
 actor.sheet.getGears=()=>[];
 native.FBLRoll.forge=(_terms,_data,options)=>{const roll={dice:[{}],type:'skill',options,pushed:false,async roll(){if(options.isAttack&&options.itemId==='gun'){firearm.shots++;firearm.current--;Hooks.callAll('updateItem',gun);}return this;},async toMessage(){const message={id:'roll'+(++sequence),author:player,rolls:[this]};game.messages.set(message.id,message);Hooks.callAll('createChatMessage',message,{},player.id);return message;}};return roll;};
-window.weaponHarness={actor,other,firearm,api,stored,round(){actor.effects=[];actor.refreshStatuses();game.combat.round++;Hooks.callAll('updateCombat',game.combat);},ammo(value){firearm.current=value;Hooks.callAll('updateItem',gun);}};
+window.weaponHarness={actor,other,firearm,api,stored,async requirement(type,value,topOff=''){await actor.update({'flags.yze-combat-permission-fix.==weaponReload':{}});firearm.reloadType=type;firearm.reloadValue=value;firearm.topOffCost=topOff;Hooks.callAll('updateItem',gun);},round(){actor.effects=[];actor.refreshStatuses();game.combat.round++;Hooks.callAll('updateCombat',game.combat);},ammo(value){firearm.current=value;Hooks.callAll('updateItem',gun);}};
 `;
 bootstrap = bootstrap.replace("await import('/yze/scripts/main.js');Hooks.callAll('init');Hooks.callAll('ready');", `${extension}\nawait import('/yze/scripts/main.js');Hooks.callAll('init');Hooks.callAll('ready');`);
 const server = createServer((req, res) => {
@@ -116,8 +116,52 @@ try {
   assert.equal(await page.evaluate(()=>weaponHarness.actor.effects.length),1);
   assert.equal(await page.evaluate(()=>[...game.messages.values()][0].rolls[0].options.yzeWidgetAttack.actorUuid),'Actor.pc');
   await page.evaluate(()=>document.getElementById('native-dialog')?.remove());
+  // Read 2F from TopOff: slow substitutes for fast, each paid step is explicit.
+  await page.evaluate(async()=>{weaponHarness.round();await weaponHarness.requirement('MAG','','2F');});
+  await page.locator('[data-weapon-action="topOff"]').click();
+  assert.equal(await page.locator('[data-weapon-calculation]').inputValue(),'auto');
+  assert.equal(await page.locator('[data-weapon-unit]').inputValue(),'fast');
+  await page.locator('[data-weapon-cost]').selectOption('slow');
+  assert.equal(await page.locator('[data-weapon-input="amount"]').inputValue(),'1');
+  await page.locator('[data-weapon-execute]').click();
+  await page.waitForFunction(()=>weaponHarness.actor.getFlag('', 'weaponReload')?.['gun:topOff']?.current===1);
+  assert.equal(await page.evaluate(()=>weaponHarness.firearm.topOffs),1);
+  await page.evaluate(()=>weaponHarness.round());
+  await page.locator('[data-weapon-action="topOff"]').click();
+  await page.locator('[data-weapon-cost]').selectOption('fast');await page.locator('[data-weapon-execute]').click();
+  await page.waitForFunction(()=>weaponHarness.firearm.topOffs===2);
+  // Seconds are full F+S pairs, never an invented half-step.
+  await page.evaluate(async()=>{weaponHarness.round();await weaponHarness.requirement('S','20');});
   await page.locator('[data-weapon-action="load"]').click();
-  await page.locator('[data-weapon-input="amount"]').fill("2");
+  assert.equal(await page.locator('[data-weapon-unit]').inputValue(),'seconds');
+  assert.equal(await page.locator('[data-weapon-cost] option[value="fast"]').evaluate(option=>option.disabled),true);
+  assert.equal(await page.locator('[data-weapon-cost] option[value="slow"]').evaluate(option=>option.disabled),true);
+  await page.locator('[data-weapon-cost]').selectOption('both');
+  assert.equal(await page.locator('[data-weapon-input="amount"]').inputValue(),'10');
+  assert.equal(await page.locator('[data-weapon-input="amount"]').isDisabled(),true);
+  await page.locator('[data-weapon-execute]').click();
+  await page.waitForFunction(()=>weaponHarness.actor.getFlag('', 'weaponReload')?.['gun:load']?.current===10);
+  await page.evaluate(()=>weaponHarness.round());await page.locator('[data-weapon-action="load"]').click();
+  await page.locator('[data-weapon-cost]').selectOption('both');await page.locator('[data-weapon-execute]').click();
+  await page.waitForFunction(()=>weaponHarness.actor.getFlag('', 'weaponReload')?.['gun:load']?.finished);
+  assert.equal(await page.evaluate(()=>weaponHarness.firearm.loads),1);
+  // 3S does not accept a fast action; manual mode keeps ability inputs editable.
+  await page.evaluate(async()=>{weaponHarness.round();await weaponHarness.requirement('MAG','','3S');});
+  await page.locator('[data-weapon-action="topOff"]').click();
+  assert.equal(await page.locator('[data-weapon-unit]').inputValue(),'slow');
+  assert.equal(await page.locator('[data-weapon-cost] option[value="fast"]').evaluate(option=>option.disabled),true);
+  await page.locator('[data-weapon-calculation]').selectOption('manual');
+  assert.equal(await page.locator('[data-weapon-input="amount"]').isDisabled(),false);
+  await page.locator('[data-weapon-input="amount"]').fill('2');
+  await page.locator('[data-weapon-save-progress]').click();
+  await page.waitForFunction(()=>weaponHarness.actor.getFlag('', 'weaponReload')?.['gun:topOff']?.calculation==='manual');
+  await page.evaluate(()=>weaponHarness.round());await page.locator('[data-weapon-action="topOff"]').click();
+  assert.equal(await page.locator('[data-weapon-calculation]').inputValue(),'manual');
+  assert.equal(await page.locator('[data-weapon-input="amount"]').inputValue(),'2');
+  await page.locator('[data-weapon-close]').click();
+  await page.locator('[data-weapon-action="attack"][data-weapon-id="gun"]').click();
+  assert.equal(await page.locator('[data-weapon-cost] option[value="fast"]').evaluate(option=>option.disabled),false);
+  await page.locator('[data-weapon-close]').click();await page.locator('[data-weapon-action="topOff"]').click();
   if (screenshot) await ribbon.screenshot({path:resolve(screenshot,"weapon-ribbon-desktop.png")});
   await page.locator("[data-weapon-pin]").click();await page.locator("[data-collapse]").click();
   assert.equal(await ribbon.isVisible(),true);
@@ -135,5 +179,5 @@ try {
   await page.evaluate(()=>{game.modules.get('fbl-quick-access').active=false;Hooks.callAll('fblQuickAccess.apiReady');});
   await page.waitForTimeout(50);assert.equal(await ribbon.isVisible(),false);assert.equal(await page.locator('.yze-equipment__hand').count(),0);
   assert.deepEqual(errors,[]);
-  console.log("PASS: actual FBL 13.0.5 RollHandler promise/options; separated ribbon groups, multi-round load, +1 top-off, manual progress, cancelled/confirmed attack, one action/ammo payment, collapse/pin, 320/360px and absent QA.");
+  console.log("PASS: native FBL dialog; multi-round load, exact +1 TopOff, 2F/3S/seconds, slow-as-fast, manual abilities, stale draft, attack/cancel, one payment/ammo use, collapse/pin, 320/360px and absent QA.");
 } finally {await browser.close();server.close();}

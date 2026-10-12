@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {createWeaponOperations, getReloadProgress, readWeaponOperation, WEAPON_OPERATION} from "../scripts/weapon-operations.js";
 import {createEquipmentOperations} from "../scripts/equipment-operations.js";
+import {applyFlagUpdate} from "./document-flags.mjs";
 
 const MODULE = "yze-combat-permission-fix";
 function fixture() {
@@ -13,8 +14,8 @@ function fixture() {
     getFlag: (_m, key) => flags[key], testUserPermission: user => actor.owned !== false && user.id === owner.id,
     async update(data) {
       if (actor.cancelWrite) {actor.cancelWrite = false; return undefined;}
-      if (actor.failComplete && data[`flags.${MODULE}.${WEAPON_OPERATION}`]?.phase === "complete") throw new Error("journal unavailable");
-      for (const [path, value] of Object.entries(data)) flags[path.split(".").at(-1)] = structuredClone(value);
+      if (actor.failComplete && data[`flags.${MODULE}.==${WEAPON_OPERATION}`]?.phase === "complete") throw new Error("journal unavailable");
+      applyFlagUpdate(flags, data, MODULE);
       actor.afterWrite?.(); return actor;
     },
     refresh() {actor.statuses = new Set(actor.effects.filter(effect => !effect.disabled).flatMap(effect => [...effect.statuses]));},
@@ -38,6 +39,7 @@ function fixture() {
       const item = {itemId: "gun", name: "Gun", broken: false, attack: true, reload: true,
         firearm: {reloadType: "MAG", reloadValue: "", magazine: {current: ammo, capacity: 6}, topOff: true}};
       if (actor.nonMagazine) item.firearm = {reloadType: "Slow", reloadValue: "2", magazine: null};
+      if (actor.reloadProfile) Object.assign(item.firearm, actor.reloadProfile);
       item.revision = JSON.stringify([item, actor.weaponEdit ?? 0]);
       return {equipmentRevision: "equipment", items: actor.stowed ? [] : [item]};
     },
@@ -178,6 +180,68 @@ test("competing owners' reload steps reject the stale progress snapshot", async 
   const f = fixture(), first = f.payload("reload", "first", "free"), second = f.payload("reload", "second", "free");
   await f.execute(first); await assert.rejects(f.execute(second), /Прогресс уже/);
   assert.equal(getReloadProgress(f.actor, f.snapshot()).current, 1);
+});
+test("automatic F reload accepts a slow replacement and computes progress on authority", async () => {
+  const f = fixture(); f.actor.nonMagazine = true; f.actor.reloadProfile = {reloadType: "Fast", reloadValue: "4"};
+  assert.deepEqual([getReloadProgress(f.actor, f.snapshot()).target, getReloadProgress(f.actor, f.snapshot()).unit], [4, "fast"]);
+  await f.execute({...f.payload("reload", "slowAsFast", "slow"), calculation: "auto", unit: "fast", target: 4, amount: 999});
+  assert.equal(getReloadProgress(f.actor, f.snapshot()).current, 1); assert.deepEqual([...f.actor.statuses], ["slowAction"]);
+  f.combat.round++; f.actor.effects = []; f.actor.refresh();
+  await f.execute({...f.payload("reload", "pair", "both"), calculation: "auto", unit: "fast", target: 4, amount: 999});
+  assert.equal(getReloadProgress(f.actor, f.snapshot()).current, 3); assert.equal(f.actor.effects.length, 2);
+});
+test("automatic S reload rejects fast costs, including manual S, without payment", async () => {
+  const f = fixture(); f.actor.nonMagazine = true;
+  for (const calculation of ["auto", "manual"]) await assert.rejects(f.execute({...f.payload("reload", calculation, "fast"), unit: "slow", calculation}), /не заменяет/);
+  assert.equal(f.actor.effects.length, 0);
+  await f.execute({...f.payload("reload", "slow", "slow"), unit: "slow", calculation: "auto", amount: 999});
+  assert.equal(getReloadProgress(f.actor, f.snapshot()).current, 1);
+  f.combat.round++; f.actor.effects = []; f.actor.refresh();
+  await f.execute({...f.payload("reload", "both", "both"), unit: "slow", calculation: "auto", amount: 999});
+  assert.equal(getReloadProgress(f.actor, f.snapshot()).current, 2); assert.equal(f.loads, 0);
+});
+test("automatic seconds advance by ten only for a pair, and survive three rounds", async () => {
+  const f = fixture(); f.actor.nonMagazine = true; f.actor.reloadProfile = {reloadType: "S", reloadValue: "30"};
+  assert.deepEqual([getReloadProgress(f.actor, f.snapshot()).target, getReloadProgress(f.actor, f.snapshot()).unit], [30, "seconds"]);
+  for (const cost of ["fast", "slow", "free"]) await assert.rejects(f.execute({...f.payload("reload", cost, cost), target: 30, unit: "seconds", calculation: "auto"}), /не продвигает/);
+  assert.equal(f.actor.effects.length, 0);
+  for (let round = 1; round <= 3; round++) {
+    await f.execute({...f.payload("reload", "pair"+round, "both"), target: 30, unit: "seconds", calculation: "auto", amount: 999});
+    assert.equal(getReloadProgress(f.actor, f.snapshot()).current, round * 10);
+    if (round < 3) {f.combat.round++; f.actor.effects = []; f.actor.refresh();}
+  }
+  assert.equal(getReloadProgress(f.actor, f.snapshot()).finished, true); assert.equal(f.loads, 0);
+});
+test("2F TopOff finishes with a pair and adds exactly one round", async () => {
+  const f = fixture(); f.actor.reloadProfile = {features: [{key: "TopOff", value: "2F"}]};
+  const initial = getReloadProgress(f.actor, f.snapshot(), "topOff"); assert.equal(initial.target, 2); assert.equal(initial.unit, "fast");
+  const command = {...f.payload("reload", "topoff", "both", "topOff"), calculation: "auto", unit: "fast", target: 2, amount: 100};
+  await f.execute(command); await f.execute(command);
+  assert.equal(f.topOffs, 1); assert.equal(f.ammo, 1); assert.equal(f.actor.effects.length, 2);
+});
+test("explicit manual abilities retain configurable time steps; auto rejects partial ten-second units", async () => {
+  const f = fixture(); f.actor.nonMagazine = true; f.actor.reloadProfile = {reloadType: "S", reloadValue: "20"};
+  await assert.rejects(f.execute({...f.payload("reload", "partial", "both"), target: 15, unit: "seconds", calculation: "auto"}), /кратны 10/);
+  await f.execute({...f.payload("reload", "ability", "fast"), target: 20, unit: "seconds", amount: 20, calculation: "manual"});
+  assert.equal(getReloadProgress(f.actor, f.snapshot()).finished, true); assert.equal(f.actor.effects.length, 1); assert.equal(f.loads, 0);
+  assert.equal(getReloadProgress(f.actor, f.snapshot()).calculation, "manual");
+  assert.equal(getReloadProgress(f.actor, f.snapshot()).amount, 20);
+});
+test("Foundry-style object merging cannot retain old operation fields or deleted progress", async () => {
+  const f = fixture(); f.flags.weaponOperation = {version: 1, id: "old", phase: "complete", progressApplied: true, obsolete: true};
+  f.flags.weaponReload = {"deleted:load": {version: 1, current: 1, target: 2}};
+  await f.execute(f.payload("reload", "fresh", "free"));
+  assert.equal(readWeaponOperation(f.actor).obsolete, undefined);
+  assert.equal(getReloadProgress(f.actor, f.snapshot()).current, 1);
+  assert.equal(f.flags.weaponReload["deleted:load"], undefined);
+  await f.execute(f.payload("prepareAttack", "attack", "free"));
+  assert.equal(readWeaponOperation(f.actor).progressApplied, undefined);
+  assert.equal(readWeaponOperation(f.actor).before, undefined);
+  await f.follow("cancel");
+  f.actor.failComplete = true;
+  await assert.rejects(f.execute({...f.payload("reload", "cancelled", "free", "topOff"), target: 3}), /journal unavailable/);
+  f.actor.failComplete = false; await f.follow("cancel");
+  assert.equal(f.flags.weaponReload["gun:topOff"], undefined);
 });
 test("synthetic Actor confirmations require the exact scene/token, including replayed receipts", async () => {
   const f = fixture(); f.actor.isToken = true; f.actor.token = {id: "token", parent: {id: "scene"}};
