@@ -2,10 +2,13 @@ import {createServer} from "node:http";
 import {readFileSync, mkdirSync} from "node:fs";
 import {resolve, sep} from "node:path";
 import assert from "node:assert/strict";
+import {assertReadable, assertTheme} from './browser-style-utils.mjs';
 const {chromium} = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
 const qa = process.env.QA_SOURCE;
 if (!qa || !process.env.FBL_SOURCE) throw new Error("Set QA_SOURCE and FBL_SOURCE (local Forbidden Lands 13.0.5 bundle).");
 const yze = resolve(new URL("..", import.meta.url).pathname.replace(/^\/(\w:)/, "$1"));
+const styles = JSON.parse(readFileSync(resolve(yze, 'module.json'), 'utf8')).styles
+  .map(path => `<link rel="stylesheet" href="/yze/${path}">`).join('');
 const core = readFileSync(process.env.FBL_SOURCE, "utf8");
 const start = core.indexOf("var FBLRollHandler=class"), end = core.indexOf(";init_define_GLOBALPATHS();", start);
 if (start < 0 || end < 0) throw new Error("Unsupported FBL bundle layout");
@@ -17,7 +20,7 @@ let bootstrap = legacy.slice(bootstrapStart, legacy.indexOf("\n`;", bootstrapSta
 const extension = `
 Hooks.on=(name,callback)=>{const list=callbacks.get(name)||[];list.push(callback);callbacks.set(name,list);return callback;};
 Hooks.off=(name,callback)=>callbacks.set(name,(callbacks.get(name)||[]).filter(value=>value!==callback));
-game.system.version='13.0.5';module.version='1.6.0';
+game.system.version='13.0.5';module.version='1.6.1';
 game.users.get=id=>game.users.find(user=>user.id===id);
 const presentation=await import('/qa/scripts/integration/weapon-presentation.js');api.getHeldItemPresentation=presentation.getHeldItemPresentation;api.capabilities.heldItemPresentation=true;
 const firearm={current:0,capacity:6,loads:0,topOffs:0,shots:0,reloadType:'MAG',reloadValue:'',topOffCost:''};
@@ -52,7 +55,8 @@ window.weaponHarness={actor,other,firearm,api,stored,async requirement(type,valu
 bootstrap = bootstrap.replace("await import('/yze/scripts/main.js');Hooks.callAll('init');Hooks.callAll('ready');", `${extension}\nawait import('/yze/scripts/main.js');Hooks.callAll('init');Hooks.callAll('ready');`);
 const server = createServer((req, res) => {
   const path = new URL(req.url, "http://localhost").pathname;
-  if (path === "/") {res.setHeader("Content-Type", "text/html; charset=utf-8");res.end(`<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/yze/styles/action-widget.css"><link rel="stylesheet" href="/yze/styles/weapon-ribbon.css"><style>body{margin:0;background:#403d38;font-family:Arial}#native-dialog{position:fixed;top:20px;left:20px;background:#eee;color:#222;padding:15px;z-index:1000}#native-dialog button{margin:4px}</style><script type="module">${bootstrap}</script>`);return;}
+  if (path === "/") {res.setHeader("Content-Type", "text/html; charset=utf-8");res.end(`<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${process.env.FOUNDRY_CSS ? '<link rel="stylesheet" href="/foundry.css">' : ''}${styles}<style>body{margin:0;background:#403d38;font-family:Arial}select option{background:#eee;color:inherit}#native-dialog{position:fixed;top:20px;left:20px;background:#eee;color:#222;padding:15px;z-index:1000}#native-dialog button{margin:4px}</style><body class="game theme-dark"><script type="module">${bootstrap}</script>`);return;}
+  if (path === '/foundry.css' && process.env.FOUNDRY_CSS) {res.setHeader('Content-Type','text/css; charset=utf-8');res.end(readFileSync(process.env.FOUNDRY_CSS));return;}
   if (path === "/native.js") {res.setHeader("Content-Type", "text/javascript");res.end(nativeModule);return;}
   const root = path.startsWith("/qa/") ? qa : yze, file = resolve(root, path.replace(/^\/(qa|yze)\//, ""));
   if (!file.startsWith(resolve(root) + sep)) {res.statusCode=403;res.end();return;}
@@ -162,6 +166,14 @@ try {
   await page.locator('[data-weapon-action="attack"][data-weapon-id="gun"]').click();
   assert.equal(await page.locator('[data-weapon-cost] option[value="fast"]').evaluate(option=>option.disabled),false);
   await page.locator('[data-weapon-close]').click();await page.locator('[data-weapon-action="topOff"]').click();
+  for (const theme of ['light', 'dark']) {
+    await assertTheme(page, '#yze-combat-permission-fix-weapon-ribbon', theme);
+    await assertReadable(page, '[data-weapon-cost]');
+    await assertReadable(page, '[data-weapon-cost] option[value="free"]');
+    await assertReadable(page, '.yze-weapon__stats dt');
+    await assertReadable(page, '.yze-weapon__manual span');
+    if(screenshot)await ribbon.screenshot({path:resolve(screenshot,`weapon-ribbon-${theme}.png`)});
+  }
   if (screenshot) await ribbon.screenshot({path:resolve(screenshot,"weapon-ribbon-desktop.png")});
   await page.locator("[data-weapon-pin]").click();await page.locator("[data-collapse]").click();
   assert.equal(await ribbon.isVisible(),true);
@@ -179,5 +191,11 @@ try {
   await page.evaluate(()=>{game.modules.get('fbl-quick-access').active=false;Hooks.callAll('fblQuickAccess.apiReady');});
   await page.waitForTimeout(50);assert.equal(await ribbon.isVisible(),false);assert.equal(await page.locator('.yze-equipment__hand').count(),0);
   assert.deepEqual(errors,[]);
+  const touch=await browser.newPage({viewport:{width:320,height:740},hasTouch:true,isMobile:true});
+  await touch.goto(`http://127.0.0.1:${server.address().port}/`);await touch.waitForFunction(()=>window.loaded);
+  await touch.locator('[data-weapon-action="load"]').click();
+  assert.ok(await touch.locator('#yze-combat-permission-fix-weapon-ribbon :is(button,input,select)').evaluateAll(elements=>elements.filter(element=>element.getClientRects().length).every(element=>element.getBoundingClientRect().height>=44)));
+  assert.equal(await touch.locator('[data-weapon-input="current"]').evaluate(element=>getComputedStyle(element).fontSize),'16px');
+  if(screenshot)await touch.locator('#yze-combat-permission-fix-weapon-ribbon').screenshot({path:resolve(screenshot,'weapon-ribbon-touch.png')});
   console.log("PASS: native FBL dialog; multi-round load, exact +1 TopOff, 2F/3S/seconds, slow-as-fast, manual abilities, stale draft, attack/cancel, one payment/ammo use, collapse/pin, 320/360px and absent QA.");
 } finally {await browser.close();server.close();}
