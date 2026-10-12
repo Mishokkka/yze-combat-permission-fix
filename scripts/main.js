@@ -1,8 +1,11 @@
 import { createCombatReference } from "./combat-reference.js";
 import { createQuickAccessBridge } from "./quick-access-bridge.js";
-import { createEquipmentOperations, supportsEquipmentControls, readEquipmentOperation } from "./equipment-operations.js";
+import { createEquipmentOperations, supportsEquipmentControls, readEquipmentOperation, hasPendingWeaponOperation } from "./equipment-operations.js";
 import { createEquipmentPanel } from "./equipment-panel.js";
 import { createRollBridge } from "./roll-bridge.js";
+import { createWeaponOperations } from "./weapon-operations.js";
+import { createAttackController } from "./attack-controller.js";
+import { createWeaponRibbon } from "./weapon-ribbon.js";
 
 const MODULE_ID = "yze-combat-permission-fix";
 const TARGET_MODULE_ID = "yze-combat";
@@ -25,7 +28,10 @@ let patchApplied = false;
 let widgetRefreshQueued = false;
 let widgetMutationBusy = false;
 let equipmentOperations = null;
+let weaponOperations = null;
+let attacks = null;
 const equipmentPanels = new WeakMap();
+const weaponRibbons = new WeakMap();
 
 const quickAccess = createQuickAccessBridge(
   () => {
@@ -449,6 +455,7 @@ async function saveWidgetPosition(element) {
   const position = clampWidgetPosition(element, rect.left, rect.top);
   element.style.left = `${position.left}px`;
   element.style.top = `${position.top}px`;
+  weaponRibbons.get(element)?.layout(element, element.classList.contains("is-collapsed"));
   await game.settings.set(MODULE_ID, WIDGET_POSITION_SETTING, position);
 }
 
@@ -469,6 +476,7 @@ function installWidgetDragging(element) {
     );
     element.style.left = `${position.left}px`;
     element.style.top = `${position.top}px`;
+    weaponRibbons.get(element)?.layout(element, element.classList.contains("is-collapsed"));
   };
 
   const finishDrag = async event => {
@@ -519,6 +527,7 @@ async function toggleActionFromWidget(statusId) {
 
   const currentlySpent = actorHasActionStatus(actor, statusId);
   if (equipmentOperations?.isBusy(actor.uuid)) return;
+  if (hasPendingWeaponOperation(actor) || weaponOperations?.isBusy(actor.uuid)) return;
   if (supportsEquipmentControls() && ["pending", "undoing"].includes(readEquipmentOperation(actor)?.phase)) return;
   widgetMutationBusy = true;
 
@@ -602,6 +611,7 @@ function createActionWidget() {
     const position = clampWidgetPosition(element, rect.left, rect.top);
     element.style.left = `${position.left}px`;
     element.style.top = `${position.top}px`;
+    weaponRibbons.get(element)?.layout(element, element.classList.contains("is-collapsed"));
   };
   const updateCollapseButton = () => {
     const collapsed = element.classList.contains("is-collapsed");
@@ -627,10 +637,19 @@ function createActionWidget() {
     undo.hidden = !controls.undoVisible; undo.disabled = controls.undoDisabled;
     undo.title = controls.undoReason || "Отменить последнюю операцию: вернуть экипировку и её стоимость";
     // A collapsed widget must still expose an interrupted operation to its owner.
-    element.querySelector("[data-collapse]").classList.toggle("has-pending-operation", controls.pending);
+    element.querySelector("[data-collapse]").classList.toggle("has-pending-operation", controls.pending || hasPendingWeaponOperation(getWidgetActor()));
     updateCollapseButton();
   } });
   equipmentPanels.set(element, panel);
+  const ribbon = createWeaponRibbon({operations: weaponOperations, attacks,
+    onGrip(itemId) {setCollapsed(false); panel.selectItem(itemId); onLayout();},
+    onPendingChange(pending) {
+      const equipmentPending = ["pending", "undoing"].includes(readEquipmentOperation(getWidgetActor())?.phase);
+      element.querySelector("[data-collapse]").classList.toggle("has-pending-operation", pending || equipmentPending);
+      updateCollapseButton();
+    },
+  });
+  weaponRibbons.set(element, ribbon);
   element.querySelector("[data-collapse]").addEventListener("click", () => setCollapsed(!element.classList.contains("is-collapsed")));
   element.querySelector("[data-swap-hands]").addEventListener("click", () => {
     if (panel.swapHands()) { setCollapsed(false); onLayout(); }
@@ -677,7 +696,8 @@ function refreshActionWidgetNow() {
   widgetRefreshQueued = false;
 
   if (game.user?.isGM) {
-    document.getElementById(WIDGET_ID)?.remove();
+    const widget = document.getElementById(WIDGET_ID);
+    weaponRibbons.get(widget)?.element.remove(); widget?.remove();
     return;
   }
 
@@ -692,7 +712,7 @@ function refreshActionWidgetNow() {
   );
 
   element.hidden = !shouldShow;
-  if (!shouldShow) return;
+  if (!shouldShow) {weaponRibbons.get(element)?.element.setAttribute("hidden", ""); return;}
 
   // A hidden widget has no measurable dimensions. Clamp after making it visible.
   if (element.dataset.positionReady !== "true") {
@@ -713,8 +733,10 @@ function refreshActionWidgetNow() {
   updateActionButton(element, SLOW_ACTION, actorHasActionStatus(actor, SLOW_ACTION));
   const equipment = quickAccess.getState();
   equipmentPanels.get(element)?.update(actor, equipment, game.combat);
+  const externalHands = weaponRibbons.get(element)?.update(actor, game.combat, element, element.classList.contains("is-collapsed"));
+  equipmentPanels.get(element)?.setExternalHands(Boolean(externalHands));
   const operation = readEquipmentOperation(actor);
-  const disabled = widgetMutationBusy || supportsEquipmentControls() &&
+  const disabled = widgetMutationBusy || hasPendingWeaponOperation(actor) || weaponOperations?.isBusy(actor.uuid) || supportsEquipmentControls() &&
     (equipmentOperations?.isBusy(actor.uuid) || ["pending", "undoing"].includes(operation?.phase));
   for (const button of element.querySelectorAll(".yze-action-widget__action")) button.disabled = Boolean(disabled);
   Hooks.callAll("yzeCombatPermissionFix.widgetUpdated", {
@@ -745,6 +767,8 @@ function installActionWidgetHooks() {
   ];
 
   for (const hook of refreshHooks) Hooks.on(hook, refreshActionWidget);
+  for (const hook of ["updateJournalEntry", "updateJournalEntryPage", "deleteJournalEntry", "deleteJournalEntryPage", "fl-firearms.magazineChanged"]) Hooks.on(hook, refreshActionWidget);
+  Hooks.on("createChatMessage", message => weaponOperations?.confirmMessage(message));
   Hooks.on("fblQuickAccess.equipmentChanged", actor => {
     const current = getWidgetActor();
     if (current && actor?.uuid === current.uuid) refreshActionWidget();
@@ -777,10 +801,19 @@ Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "equipmentOpen", {
     scope: "client", config: false, type: Boolean, default: true,
   });
+  game.settings.register(MODULE_ID, "weaponRibbonLayout", {
+    name: "Расположение строк оружия", scope: "client", config: true, type: String, default: "floating",
+    choices: {floating: "Независимая лента", side: "Рядом с виджетом", below: "Под виджетом"},
+    onChange: refreshActionWidget,
+  });
+  game.settings.register(MODULE_ID, "weaponRibbonPinned", {scope: "client", config: false, type: Boolean, default: false});
+  game.settings.register(MODULE_ID, "weaponRibbonPosition", {scope: "client", config: false, type: Object, default: {}});
 });
 
 Hooks.once("ready", () => {
   equipmentOperations = createEquipmentOperations();
+  weaponOperations = createWeaponOperations();
+  attacks = createAttackController({operations: weaponOperations, rolls, getActor: getWidgetActor, onChange: refreshActionWidget});
   const yzeCombat = game.modules.get(TARGET_MODULE_ID);
   if (!yzeCombat?.active) {
     warn("Year Zero Engine: Combat is not active; patch not applied.");
@@ -801,7 +834,8 @@ Hooks.once("ready", () => {
     installSocketListener();
     patchApplied = true;
     equipmentOperations.register();
-    Hooks.on("fblQuickAccess.apiReady", () => equipmentOperations.register());
+    weaponOperations.register();
+    Hooks.on("fblQuickAccess.apiReady", () => {equipmentOperations.register(); weaponOperations.register();});
     installActionWidgetHooks();
     refreshActionWidget();
     log(`Applied for yze-combat ${TARGET_VERSION}.`);
@@ -834,6 +868,7 @@ Hooks.once("ready", () => {
       refreshActionWidget,
       quickAccess,
       rolls,
+      get weapons() {return weaponOperations;},
     });
     Hooks.callAll("yzeCombatPermissionFix.apiReady", module.api);
   }

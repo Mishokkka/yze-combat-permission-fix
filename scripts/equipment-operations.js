@@ -9,6 +9,19 @@ const queues = new Map();
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const clone = value => structuredClone(value);
 
+export async function enqueueActorOperation(uuid, callback) {
+  const prior = queues.get(uuid) ?? Promise.resolve();
+  const task = prior.catch(() => {}).then(callback);
+  queues.set(uuid, task);
+  try { return await task; }
+  finally { if (queues.get(uuid) === task) queues.delete(uuid); }
+}
+
+export function hasPendingWeaponOperation(actor) {
+  const operation = actor?.getFlag?.(MODULE_ID, "weaponOperation");
+  return operation?.version === 1 && !["complete", "cancelled"].includes(operation.phase);
+}
+
 export function hasActionStatus(actor, id) {
   return Boolean(actor.statuses?.has?.(id) || actor.effects?.some(effect =>
     !effect.disabled && !effect.isSuppressed && (effect.statuses?.has?.(id) || effect.statuses?.includes?.(id))));
@@ -24,11 +37,11 @@ export function readEquipmentOperation(actor) {
   return value?.version === 1 ? clone(value) : null;
 }
 
-function effectsFor(actor, id) {
-  return Array.from(actor.effects ?? []).filter(effect => effect.getFlag?.(MODULE_ID, OPERATION_FLAG) === id);
+export function effectsFor(actor, id, tag = OPERATION_FLAG) {
+  return Array.from(actor.effects ?? []).filter(effect => effect.getFlag?.(MODULE_ID, tag) === id);
 }
 
-function requireSameRound(operation, actor) {
+export function requireSameRound(operation, actor) {
   if (!operation.combat) return;
   if (typeof operation.combat.id !== "string" || !Number.isInteger(operation.combat.round) || operation.combat.round < 1) throw new Error("Некорректный раунд боя.");
   const combat = game.combats?.get(operation.combat.id) ?? game.combat;
@@ -40,7 +53,7 @@ function requireSameRound(operation, actor) {
 
 async function saveOperation(actor, operation, guard) {
   guard();
-  if (!await actor.update({ [`flags.${MODULE_ID}.${OPERATION_FLAG}`]: operation }, { render: false, fblqaEquipmentOnly: true })) {
+  if (!await actor.update({ [`flags.${MODULE_ID}.==${OPERATION_FLAG}`]: operation }, { render: false, fblqaEquipmentOnly: true })) {
     throw new Error("Запись операции отменена. Перечитайте состояние персонажа.");
   }
 }
@@ -53,23 +66,23 @@ function verifyReceiptState(actor, api, receipt) {
   }
 }
 
-async function createPaidEffect(actor, statusId, operationId, guard) {
+export async function createPaidEffect(actor, statusId, operationId, guard, tag = OPERATION_FLAG) {
   const Effect = getDocumentClass("ActiveEffect");
   const effect = await Effect.fromStatusEffect(statusId);
   const data = effect.toObject();
   delete data._id;
   data.flags ??= {};
-  data.flags[MODULE_ID] = { ...(data.flags[MODULE_ID] ?? {}), [OPERATION_FLAG]: operationId };
+  data.flags[MODULE_ID] = { ...(data.flags[MODULE_ID] ?? {}), [tag]: operationId };
   guard();
   const created = await actor.createEmbeddedDocuments("ActiveEffect", [data]);
   if (!created?.length || !hasActionStatus(actor, statusId)) throw new Error("Не удалось отметить стоимость действия. Операция ожидает завершения.");
 }
 
-async function removePaidEffects(actor, operationId, guard) {
-  const ids = effectsFor(actor, operationId).map(effect => effect.id);
+export async function removePaidEffects(actor, operationId, guard, tag = OPERATION_FLAG) {
+  const ids = effectsFor(actor, operationId, tag).map(effect => effect.id);
   guard();
   if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids);
-  if (effectsFor(actor, operationId).length) throw new Error("Отмена отметок действий не завершена. Повторите отмену операции.");
+  if (effectsFor(actor, operationId, tag).length) throw new Error("Отмена отметок действий не завершена. Повторите отмену операции.");
 }
 
 export function equipmentUndoError(actor, api = getQuickAccessEquipmentApi()) {
@@ -108,11 +121,7 @@ export function createEquipmentOperations({ getApi = getQuickAccessEquipmentApi,
         !user?.active || !actor.testUserPermission?.(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) {
       throw new Error("Нет прав на изменение этого персонажа.");
     }
-    const prior = queues.get(actor.uuid) ?? Promise.resolve();
-    const task = prior.catch(() => {}).then(() => run(actor, api, payload, user, guardAuthority));
-    queues.set(actor.uuid, task);
-    try { return await task; }
-    finally { if (queues.get(actor.uuid) === task) queues.delete(actor.uuid); }
+    return enqueueActorOperation(actor.uuid, () => run(actor, api, payload, user, guardAuthority));
   }
 
   async function run(actor, api, payload, user, guardAuthority) {
@@ -123,6 +132,7 @@ export function createEquipmentOperations({ getApi = getQuickAccessEquipmentApi,
       if (!user.active || !actor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) throw new Error("Права персонажа изменились.");
     };
     guard();
+    if (hasPendingWeaponOperation(actor)) throw new Error("Сначала завершите или отмените операцию оружия.");
     let operation = readEquipmentOperation(actor);
     if (payload.kind === "toggle") {
       if (operation?.phase === "pending" || operation?.phase === "undoing") throw new Error("Сначала завершите или отмените операцию экипировки.");
