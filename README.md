@@ -197,6 +197,7 @@ game.modules.get("yze-combat-permission-fix").api
 - Follow Foundry's light/dark client theme, keep cost options readable, and use consistent focus, primary buttons, typography and touch targets.
 - Preserve all action, equipment, roll and reload behavior, public APIs and stored placement/collapse settings.
 - Check both palettes and 320/360 px layouts in browser integration harnesses, optionally loading the actual Foundry stylesheet via FOUNDRY_CSS.
+- Composite background/text alpha in contrast checks; `node dev-tests/browser-style.mjs` checks seven translucent, nested and unreadable cases (PLAYWRIGHT_MODULE/CHROME_PATH as in other browser checks).
 
 ### 1.6.0
 
