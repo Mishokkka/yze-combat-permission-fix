@@ -1,6 +1,6 @@
 # YZE Combat: Permission Fix + Action Widget
 
-Version 1.6.0
+Version 1.6.1
 
 Target environment:
 
@@ -51,6 +51,22 @@ YZE Combat's **Slow & Fast Actions** mode is enabled.
   widget follow that token. Otherwise it prefers the player's active combatant.
 
 The widget does not require the Combat Tracker to be open.
+
+### Warm Tactical appearance
+
+The action widget, slots, combat reference, weapon ribbon and operation forms
+share the **Тёплый тактический** style: opaque warm surfaces, bronze accents,
+5 px corners and compact 6 px spacing. Foundry's client light/dark appearance
+switches the palette, including native cost dropdowns; without a theme class
+the dark palette is used. Main text is 13 px, secondary labels are 11 px.
+Available actions and held slots have an accent border. Spent actions remain
+readable, with a crossed-out title and their explicit status. Weapon labels,
+values, ammunition, traits and operation controls remain separate groups.
+Primary confirmation buttons share an accent fill; manual progress correction
+and recovery stay distinct. Keyboard focus is visible and touch controls keep
+at least 44 px targets. Placement, pinning and collapse settings are preserved.
+The styling is scoped to the two widget roots and does not restyle Item sheets,
+the native roll dialog, or the Quick Access character sheet.
 
 ## Combat reference
 
@@ -174,6 +190,14 @@ game.modules.get("yze-combat-permission-fix").api
 `applied` should be `true`.
 
 ## Changelog
+
+### 1.6.1
+
+- Apply the selected Warm Tactical style to both panels, slots, reference and operation forms through a shared scoped palette.
+- Follow Foundry's light/dark client theme, keep cost options readable, and use consistent focus, primary buttons, typography and touch targets.
+- Preserve all action, equipment, roll and reload behavior, public APIs and stored placement/collapse settings.
+- Check both palettes and 320/360 px layouts in browser integration harnesses, optionally loading the actual Foundry stylesheet via FOUNDRY_CSS.
+- Composite background/text alpha in contrast checks; `node dev-tests/browser-style.mjs` checks seven translucent, nested and unreadable cases (PLAYWRIGHT_MODULE/CHROME_PATH as in other browser checks).
 
 ### 1.6.0
 

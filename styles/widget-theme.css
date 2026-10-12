@@ -1,0 +1,66 @@
+/* Warm Tactical. Foundry v13 puts the client appearance on body.theme-light.
+ * Keep a dark fallback when no appearance class is present. */
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) {
+  --yze-surface: #242019;
+  --yze-raised: #30291f;
+  --yze-field: #201c16;
+  --yze-ink: #f1eade;
+  --yze-quiet: #c1b49e;
+  --yze-line: #655640;
+  --yze-accent: #bc9c5e;
+  --yze-on-accent: #241d10;
+  --yze-alert: #f1a49a;
+  --yze-shadow: #00000038;
+  --yze-radius: 5px;
+  --yze-space: 6px;
+  color-scheme: dark;
+  color: var(--yze-ink);
+  background: var(--yze-surface);
+  border: 1px solid var(--yze-line);
+  border-radius: var(--yze-radius);
+  box-shadow: 0 5px 16px var(--yze-shadow);
+  font: 400 13px/1.4 var(--font-primary, Arial, sans-serif);
+  font-variant-numeric: tabular-nums;
+}
+body.theme-light :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) {
+  --yze-surface: #e9e2d7;
+  --yze-raised: #f8f3e9;
+  --yze-field: #fffaf2;
+  --yze-ink: #29241c;
+  --yze-quiet: #665a47;
+  --yze-line: #b8a78d;
+  --yze-accent: #725120;
+  --yze-on-accent: #fffaf2;
+  --yze-alert: #932b26;
+  --yze-shadow: #29201820;
+  color-scheme: light;
+}
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) *,
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) *::before,
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) *::after { box-sizing: border-box; }
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) :is(button, input, select) {
+  font: inherit; color: var(--yze-ink); background: var(--yze-field);
+  border: 1px solid var(--yze-line); border-radius: var(--yze-radius);
+  margin: 0; min-width: 0; min-height: 28px; width: auto; height: auto;
+  padding: 3px 6px; box-shadow: none; line-height: 1.2; color-scheme: inherit;
+  transition: background 90ms ease, border-color 90ms ease;
+}
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) button { cursor: pointer; touch-action: manipulation; }
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) button:hover:enabled { background: var(--yze-raised); }
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) button:disabled { opacity: .5; cursor: default; }
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) :is(input, select) { width: 100%; }
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) :is(input, select):disabled { color: var(--yze-quiet); }
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) option { color: var(--yze-ink); background-color: var(--yze-field); }
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) option:disabled { color: var(--yze-quiet); }
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) :is(button, input, select, summary, [tabindex]):focus-visible { outline: 2px solid var(--yze-accent); outline-offset: -2px; }
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) :is(button, input, select):focus:not(:focus-visible) { outline: none; box-shadow: none; }
+/* Primary actions have a filled accent; manual corrections stay secondary. */
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) button:is([data-apply], [data-weapon-execute]) { background: var(--yze-accent); border-color: var(--yze-accent); color: var(--yze-on-accent); }
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) button:is([data-apply], [data-weapon-execute]):hover:enabled { background: var(--yze-accent); filter: brightness(1.08); }
+@media (pointer: coarse) {
+  :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) :is(button, input, select) { min-height: 44px; }
+  :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) :is(input, select) { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) :is(button, input, select) { transition: none; }
+}

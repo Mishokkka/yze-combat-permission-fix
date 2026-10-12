@@ -2,10 +2,13 @@ import { createServer } from 'node:http';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import assert from 'node:assert/strict';
+import { assertReadable, assertTheme } from './browser-style-utils.mjs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const qa = process.env.QA_SOURCE;
 if (!qa) throw new Error('Set QA_SOURCE to the matching Quick Access source checkout.');
 const yze = resolve(new URL('..', import.meta.url).pathname.replace(/^\/(\w:)/,'$1'));
+const styles = JSON.parse(readFileSync(resolve(yze, 'module.json'), 'utf8')).styles
+  .map(path => `<link rel="stylesheet" href="/yze/${path}">`).join('');
 const bootstrap = `
 const callbacks=new Map();
 window.Hooks={once:(n,f)=>{const a=callbacks.get(n)||[];a.push(f);callbacks.set(n,a);},on:(n,f)=>Hooks.once(n,f),callAll:(n,...args)=>{for(const f of callbacks.get(n)||[])f(...args);}};
@@ -17,7 +20,7 @@ window.CONST={DOCUMENT_OWNERSHIP_LEVELS:{OWNER:3,OBSERVER:2}};
 let sequence=0;
 window.foundry={utils:{randomID:()=>('op'+(++sequence))}};
 const stored=new Map(JSON.parse(localStorage.getItem('test-settings')||'[]'));
-const module={active:true,version:'1.6.0'};
+const module={active:true,version:'1.6.1'};
 const player={id:'player',active:true,isGM:false};
 // Transport is simulated in one browser; identity/authority is tested separately.
 const authority={id:'player',active:true,isGM:true};
@@ -47,7 +50,8 @@ window.harness={actor,other,module,stored,api};window.loaded=true;
 `;
 const server=createServer((req,res)=>{
   const url=new URL(req.url,'http://localhost');
-  if(url.pathname==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(`<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/yze/styles/action-widget.css"><link rel="stylesheet" href="/qa/styles/02-tooltips.css"><style>body{margin:0;background:#403d38;font-family:Arial}select option{background:#eee;color:inherit}</style><script type="module">${bootstrap}</script>`);return;}
+  if(url.pathname==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(`<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${process.env.FOUNDRY_CSS ? '<link rel="stylesheet" href="/foundry.css">' : ''}${styles}<link rel="stylesheet" href="/qa/styles/02-tooltips.css"><style>body{margin:0;background:#403d38;font-family:Arial}select option{background:#eee;color:inherit}</style><body class="game theme-dark"><script type="module">${bootstrap}</script>`);return;}
+  if(url.pathname==='/foundry.css' && process.env.FOUNDRY_CSS){res.setHeader('Content-Type','text/css; charset=utf-8');res.end(readFileSync(process.env.FOUNDRY_CSS));return;}
   const root=url.pathname.startsWith('/qa/')?qa:yze;
   const file=resolve(root,url.pathname.replace(/^\/(qa|yze)\//,''));
   if(!file.startsWith(resolve(root)+sep)){res.statusCode=403;res.end();return;}
@@ -55,6 +59,7 @@ const server=createServer((req,res)=>{
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const browser=await chromium.launch({headless:true,...(process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:{})});
+if(process.env.SCREENSHOT_DIR)mkdirSync(process.env.SCREENSHOT_DIR,{recursive:true});
 try{
   const page=await browser.newPage({viewport:{width:1000,height:700}}),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
@@ -69,7 +74,7 @@ try{
   assert.equal(await page.locator('.yze-action-widget__handle [data-undo]').count(),1);
   await page.locator('[data-collapse]').click();
   await page.waitForFunction(()=>harness.stored.get('actionWidgetCollapsed')===true);
-  assert.equal(await widget.evaluate(e=>Math.round(e.getBoundingClientRect().height)),29);
+  assert.ok(await widget.evaluate(e=>e.getBoundingClientRect().height<=48), 'Collapsed desktop widget stays compact');
   assert.equal(await page.locator('.yze-action-widget__body').isVisible(),false);
   assert.equal(await page.locator('.yze-action-widget__actions').isVisible(),false);
   assert.equal(await page.locator('.yze-action-widget__name').textContent(),'Игрок');
@@ -94,12 +99,20 @@ try{
   await page.locator('[data-slot="0"]').click();await page.locator('[data-open-item]').click();
   assert.equal(await page.evaluate(()=>window.openedItem),'sword');
   await page.locator('[data-grip="both"]').click();
-  assert.deepEqual(await page.locator('[data-cost] option[value="free"]').evaluate(e=>({color:getComputedStyle(e).color,background:getComputedStyle(e).backgroundColor})),{color:'rgb(240, 240, 224)',background:'rgb(41, 37, 31)'});
+  for (const theme of ['light', 'dark']) {
+    await assertTheme(page, '.yze-action-widget', theme);
+    await assertReadable(page, '[data-cost]');
+    await assertReadable(page, '[data-cost] option[value="free"]');
+    await assertReadable(page, '.yze-action-widget__state');
+    if(process.env.SCREENSHOT_DIR)await widget.screenshot({path:resolve(process.env.SCREENSHOT_DIR,`equipment-${theme}-cost.png`)});
+  }
   assert.equal(await page.locator('[data-apply]').isDisabled(),true);
   assert.deepEqual(await page.evaluate(()=>harness.api.getEquipmentState(harness.actor).hands),{left:null,right:null});
   await page.locator('[data-cost]').selectOption('fast');await page.locator('[data-apply]').click();
   await page.waitForFunction(()=>harness.actor.getFlag('', 'equipmentOperation')?.phase==='complete');
   assert.deepEqual(await page.evaluate(()=>harness.api.getEquipmentState(harness.actor).hands),{left:'sword',right:'sword'});
+  assert.equal(await page.locator('[data-action="fastAction"]').evaluate(e=>getComputedStyle(e).opacity),'1');
+  await assertReadable(page, '[data-action="fastAction"] .yze-action-widget__label');
   assert.equal(await page.locator('.yze-equipment__hand.is-both').count(),1);
   assert.deepEqual(await page.evaluate(()=>({grip:harness.actor.apps.test.element.querySelector('.fblqa-grip-label')?.textContent,wallet:harness.actor.apps.test.element.querySelector('.wallet-test')===harness.actor.walletNode})),{grip:'2Р',wallet:true});
   const translated=await page.evaluate(async()=>{
