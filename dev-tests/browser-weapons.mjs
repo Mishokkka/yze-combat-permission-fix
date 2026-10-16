@@ -30,7 +30,7 @@ const gun={id:'gun',uuid:actor.uuid+'.Item.gun',name:'Длинный револ�
 actor.items.set('gun',gun);
 for(const pc of [actor,other]){pc.canAct=true;for(const item of pc.items.values()){item.parent=pc;item.actor=pc;item.system.bonus??={value:2};item.system.damage??=2;item.system.range??='arm';item.system.features??={edged:true,pointed:true,parrying:true};item.getRollData=()=>({isBroken:false,artifactDie:''});}}
 game.modules.set('fl-firearms',{active:true,version:'0.4.7',api:{
-  getFirearmTooltipData:item=>item.id==='gun'?{isFirearm:true,firearmType:'regular',reloadType:firearm.reloadType,reloadValue:firearm.reloadValue,magCapacity:6,magCurrent:firearm.current,apOp:'*',apValue:0.5,features:[{key:'Reliable',label:'Надежное',automated:true,descriptionHtml:'<p>Описание надёжного огнестрела</p>'},{key:'TopOff',label:'Дозарядка',automated:true,hasInput:true,value:firearm.topOffCost},{key:'Rapid',label:'Скорострельное',hasInput:true,value:2,automated:false}]}:null,
+  getFirearmTooltipData:item=>item.id==='gun'?{isFirearm:true,firearmType:'regular',reloadType:firearm.reloadType,reloadValue:firearm.reloadValue,magCapacity:6,magCurrent:firearm.current,apOp:'*',apValue:0.5,features:[{key:'Reliable',label:'Надежное',automated:true,descriptionHtml:''},{key:'TopOff',label:'Дозарядка',automated:true,hasInput:true,value:firearm.topOffCost},{key:'Rapid',label:'Скорострельное',hasInput:true,value:2,automated:false}]}:null,
   getMagazineProfile:()=>({current:firearm.current,capacity:6}),
   async loadMagazine(){const oldAmmo=firearm.current;firearm.loads++;firearm.current=6;Hooks.callAll('updateItem',gun);return {oldAmmo,newAmmo:6};},
   async topOffMagazine(){const oldAmmo=firearm.current;firearm.topOffs++;firearm.current++;Hooks.callAll('updateItem',gun);return {oldAmmo,newAmmo:firearm.current};},
@@ -51,7 +51,8 @@ CONFIG.fbl.itemTypes=['weapon','gear'];game.userId=player.id;
 foundry.applications={handlebars:{renderTemplate:async(_path,data)=>'<article>'+data.name+'</article>'}};
 window.ChatMessage={getWhisperRecipients:()=>['GM'],async create(data){const message={...data,id:'item'+(++sequence),flags:{},async setFlag(module,key,value){this.flags[module]={[key]:value};}};game.messages.set(message.id,message);window.postedCard=message;return message;}};
 for(const item of actor.items.values()){item.getFlag=()=>false;item.toObject=()=>structuredClone({name:item.name,img:item.img,type:item.type,system:item.system});native.attachPost(item);}
-const pages=[{name:'Режущее',text:{content:'<p>Правило режущего оружия</p>'},isOwner:false,testUserPermission:()=>true},{name:'Надежное',text:{content:'<p>Описание надёжного огнестрела</p>'},isOwner:false,testUserPermission:()=>true}];
+// FL's exact-name cache can miss this page; QA must resolve the live journal rule.
+const pages=[{name:'Режущее',text:{content:'<p>Правило режущего оружия</p>'},isOwner:false,testUserPermission:()=>true},{name:' надежное ',text:{content:'<p>Описание надёжного огнестрела</p>'},isOwner:false,testUserPermission:()=>true}];
 game.journal=[{name:'Rich Info Tooltips',pages,testUserPermission:()=>true}];
 foundry.utils.cleanHTML=html=>html;
 window.TextEditor={async enrichHTML(text,{secrets=false}={}){const root=new DOMParser().parseFromString(text,'text/html');if(!secrets)root.querySelectorAll('section.secret').forEach(node=>node.remove());return root.body.innerHTML.replace(/@INFO\\[([^\\]]+)\\]/g,'<a class="info-enriched">$1</a>');}};
@@ -63,7 +64,7 @@ actor.sheet.getGear=itemId=>({attribute:{name:'agility',value:3,label:'Agility'}
 actor.sheet.getRollOptions=()=>({actorId:actor.id,actorType:'character',type:'skill'});
 actor.sheet.getGears=()=>[];
 native.FBLRoll.forge=(_terms,_data,options)=>{const roll={dice:[{}],type:'skill',options,pushed:false,async roll(){if(options.isAttack&&options.itemId==='gun'){firearm.shots++;firearm.current--;Hooks.callAll('updateItem',gun);}return this;},async toMessage(){const message={id:'roll'+(++sequence),author:player,rolls:[this]};game.messages.set(message.id,message);Hooks.callAll('createChatMessage',message,{},player.id);return message;}};return roll;};
-window.weaponHarness={actor,other,firearm,api,stored,async requirement(type,value,topOff=''){await actor.update({'flags.yze-combat-permission-fix.==weaponReload':{}});firearm.reloadType=type;firearm.reloadValue=value;firearm.topOffCost=topOff;Hooks.callAll('updateItem',gun);},round(){actor.effects=[];actor.refreshStatuses();game.combat.round++;Hooks.callAll('updateCombat',game.combat);},ammo(value){firearm.current=value;Hooks.callAll('updateItem',gun);}};
+window.weaponHarness={actor,other,firearm,api,stored,pages,async requirement(type,value,topOff=''){await actor.update({'flags.yze-combat-permission-fix.==weaponReload':{}});firearm.reloadType=type;firearm.reloadValue=value;firearm.topOffCost=topOff;Hooks.callAll('updateItem',gun);},round(){actor.effects=[];actor.refreshStatuses();game.combat.round++;Hooks.callAll('updateCombat',game.combat);},ammo(value){firearm.current=value;Hooks.callAll('updateItem',gun);}};
 `;
 bootstrap = bootstrap.replace("await import('/yze/scripts/main.js');Hooks.callAll('init');Hooks.callAll('ready');", `${extension}\nawait import('/yze/scripts/main.js');Hooks.callAll('init');Hooks.callAll('ready');`);
 const server = createServer((req, res) => {
@@ -86,6 +87,7 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}/`);await page.waitForFunction(()=>window.loaded);
   const ribbon=page.locator("#yze-combat-permission-fix-weapon-ribbon");
   await ribbon.waitFor(); assert.equal(await page.locator("[data-weapon-row]").count(),2);
+  assert.equal(await ribbon.locator('[data-equipment-feature="Reliable"]').count(),1,'attach firearm hover even when provider descriptionHtml is empty');
   assert.equal(await page.locator(".yze-equipment__hand").count(),0);
   assert.ok((await ribbon.textContent()).includes("Патроны"));
   await page.locator('[data-weapon-action="load"]').click();
@@ -151,6 +153,23 @@ try {
     await page.mouse.move(0,0);
   }
   await page.keyboard.press('Escape');
+  // A live journal edit refreshes the property, and keyboard focus opens the same tooltip.
+  await page.evaluate(()=>{document.querySelector('[data-equipment-feature="Reliable"]').dataset.beforeRuleEdit='true';const rule=weaponHarness.pages[1];rule.text.content='<p>Обновлённое правило огнестрела</p>';Hooks.callAll('updateJournalEntryPage',rule);});
+  await page.locator('[data-before-rule-edit]').waitFor({state:'detached'});
+  await page.locator('[data-equipment-feature="Reliable"]').focus();
+  await page.waitForFunction(()=>document.querySelector('#fblqa-item-tooltip.is-visible')?.textContent.includes('Обновлённое правило'));
+  await page.keyboard.press('Escape');
+  await page.evaluate(()=>{const rule=weaponHarness.pages[1];rule.testUserPermission=()=>false;Hooks.callAll('updateJournalEntryPage',rule);});
+  await page.waitForFunction(()=>!document.querySelector('[data-equipment-feature="Reliable"]'));
+  await page.evaluate(()=>{const rule=weaponHarness.pages[1];rule.testUserPermission=()=>true;Hooks.callAll('updateJournalEntryPage',rule);});
+  await page.locator('[data-equipment-feature="Reliable"]').waitFor();
+  // A page owner can read a rule contained entirely in a secret section; others cannot.
+  await page.evaluate(()=>{const rule=weaponHarness.pages[1];rule.text.content='<section class="secret"><p>Правило для владельца страницы</p></section>';rule.isOwner=false;Hooks.callAll('updateJournalEntryPage',rule);});
+  await page.waitForFunction(()=>!document.querySelector('[data-equipment-feature="Reliable"]'));
+  await page.evaluate(()=>{const rule=weaponHarness.pages[1];rule.isOwner=true;Hooks.callAll('updateJournalEntryPage',rule);});
+  await page.locator('[data-equipment-feature="Reliable"]').hover();
+  await page.waitForFunction(()=>document.querySelector('#fblqa-item-tooltip.is-visible')?.textContent.includes('Правило для владельца'));
+  await page.mouse.move(0,0);await page.keyboard.press('Escape');
   // Read 2F from TopOff: slow substitutes for fast, each paid step is explicit.
   await page.evaluate(async()=>{weaponHarness.round();await weaponHarness.requirement('MAG','','2F');});
   await page.locator('[data-weapon-action="topOff"]').click();
