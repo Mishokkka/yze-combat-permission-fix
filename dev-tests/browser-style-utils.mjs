@@ -47,10 +47,10 @@ export async function assertReadable(page, selector) {
   }
 }
 
-/** Switch Foundry's client theme, settle control transitions and check the panel. */
+/** The widget stays dark and readable under either Foundry client theme. */
 export async function assertTheme(page, panel, theme) {
   await page.evaluate(value => { document.body.classList.remove('theme-light', 'theme-dark'); document.body.classList.add(`theme-${value}`); }, theme);
   await page.waitForTimeout(120); // The action buttons have a 90 ms background transition.
-  assert.equal(await page.locator(panel).evaluate(element => getComputedStyle(element).colorScheme), theme);
+  assert.equal(await page.locator(panel).evaluate(element => getComputedStyle(element).colorScheme), 'dark');
   await assertReadable(page, panel);
 }

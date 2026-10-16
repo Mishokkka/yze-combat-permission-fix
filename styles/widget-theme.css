@@ -1,5 +1,4 @@
-/* Warm Tactical. Foundry v13 puts the client appearance on body.theme-light.
- * Keep a dark fallback when no appearance class is present. */
+/* One self-contained dark theme. Never inherit the sheet's palette or fonts. */
 :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) {
   --yze-surface: #242019;
   --yze-raised: #30291f;
@@ -19,25 +18,15 @@
   border: 1px solid var(--yze-line);
   border-radius: var(--yze-radius);
   box-shadow: 0 5px 16px var(--yze-shadow);
-  font: 400 13px/1.4 var(--font-primary, Arial, sans-serif);
+  font: 400 12px/1.3 Arial, sans-serif;
   font-variant-numeric: tabular-nums;
-}
-body.theme-light :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) {
-  --yze-surface: #e9e2d7;
-  --yze-raised: #f8f3e9;
-  --yze-field: #fffaf2;
-  --yze-ink: #29241c;
-  --yze-quiet: #665a47;
-  --yze-line: #b8a78d;
-  --yze-accent: #725120;
-  --yze-on-accent: #fffaf2;
-  --yze-alert: #932b26;
-  --yze-shadow: #29201820;
-  color-scheme: light;
 }
 :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) *,
 :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) *::before,
 :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) *::after { box-sizing: border-box; }
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) :is(p, span, strong, label, summary, dt, dd, small, h4) {
+  color: var(--yze-ink); font-family: Arial, sans-serif; text-shadow: none; letter-spacing: normal;
+}
 :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) :is(button, input, select) {
   font: inherit; color: var(--yze-ink); background: var(--yze-field);
   border: 1px solid var(--yze-line); border-radius: var(--yze-radius);
@@ -46,11 +35,11 @@ body.theme-light :is(#yze-combat-permission-fix-action-widget, #yze-combat-permi
   transition: background 90ms ease, border-color 90ms ease;
 }
 :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) button { cursor: pointer; touch-action: manipulation; }
-:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) button:hover:enabled { background: var(--yze-raised); }
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) button:hover:enabled { background: var(--yze-raised); color: var(--yze-ink); }
 :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) button:disabled { opacity: .5; cursor: default; }
 :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) :is(input, select) { width: 100%; }
 :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) :is(input, select):disabled { color: var(--yze-quiet); }
-:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) option { color: var(--yze-ink); background-color: var(--yze-field); }
+:is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) :is(option, optgroup) { color: var(--yze-ink); background-color: var(--yze-field); }
 :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) option:disabled { color: var(--yze-quiet); }
 :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) :is(button, input, select, summary, [tabindex]):focus-visible { outline: 2px solid var(--yze-accent); outline-offset: -2px; }
 :is(#yze-combat-permission-fix-action-widget, #yze-combat-permission-fix-weapon-ribbon) :is(button, input, select):focus:not(:focus-visible) { outline: none; box-shadow: none; }

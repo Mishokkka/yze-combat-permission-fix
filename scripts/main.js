@@ -580,6 +580,7 @@ function createActionWidget() {
       <span class="yze-action-widget__name">Действия</span>
       <button type="button" class="yze-action-widget__tool" data-swap-hands hidden title="Поменять руки" aria-label="Поменять руки">⇄</button>
       <button type="button" class="yze-action-widget__tool" data-undo hidden title="Отменить последнюю операцию" aria-label="Отменить последнюю операцию">↶</button>
+      <button type="button" class="yze-action-widget__tool" data-weapons-toggle hidden aria-label="Показать или скрыть оружие">⚔</button>
       <button type="button" class="yze-action-widget__tool" data-collapse aria-controls="${WIDGET_ID}-actions ${WIDGET_ID}-body"></button>
     </div>
     <div class="yze-action-widget__actions"></div>
@@ -641,15 +642,27 @@ function createActionWidget() {
     updateCollapseButton();
   } });
   equipmentPanels.set(element, panel);
-  const ribbon = createWeaponRibbon({operations: weaponOperations, attacks,
+  const ribbon = createWeaponRibbon({operations: weaponOperations, attacks, rolls,
     onGrip(itemId) {setCollapsed(false); panel.selectItem(itemId); onLayout();},
     onPendingChange(pending) {
       const equipmentPending = ["pending", "undoing"].includes(readEquipmentOperation(getWidgetActor())?.phase);
       element.querySelector("[data-collapse]").classList.toggle("has-pending-operation", pending || equipmentPending);
       updateCollapseButton();
     },
+    onVisibilityChange({available, visible}) {
+      const toggle = element.querySelector("[data-weapons-toggle]");
+      toggle.hidden = !available;
+      toggle.setAttribute("aria-pressed", String(visible));
+      toggle.title = toggle.ariaLabel = visible ? "Скрыть плашку оружия" : "Показать плашку оружия";
+      panel.setExternalHands(available && visible);
+    },
   });
   weaponRibbons.set(element, ribbon);
+  element.querySelector("[data-weapons-toggle]").addEventListener("click", () => {
+    if (!ribbon.visible) setCollapsed(false);
+    ribbon.setVisible(!ribbon.visible);
+    refreshActionWidget();
+  });
   element.querySelector("[data-collapse]").addEventListener("click", () => setCollapsed(!element.classList.contains("is-collapsed")));
   element.querySelector("[data-swap-hands]").addEventListener("click", () => {
     if (panel.swapHands()) { setCollapsed(false); onLayout(); }
@@ -807,6 +820,7 @@ Hooks.once("init", () => {
     onChange: refreshActionWidget,
   });
   game.settings.register(MODULE_ID, "weaponRibbonPinned", {scope: "client", config: false, type: Boolean, default: false});
+  game.settings.register(MODULE_ID, "weaponRibbonVisible", {scope: "client", config: false, type: Boolean, default: true});
   game.settings.register(MODULE_ID, "weaponRibbonPosition", {scope: "client", config: false, type: Object, default: {}});
 });
 

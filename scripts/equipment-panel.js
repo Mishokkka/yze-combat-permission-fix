@@ -1,5 +1,6 @@
 import { getQuickAccessEquipmentApi } from "./quick-access-bridge.js";
 import { supportsEquipmentControls, readEquipmentOperation, hasActionStatus, equipmentUndoError, hasPendingWeaponOperation } from "./equipment-operations.js";
+import { postItemToChat } from "./item-actions.js";
 
 const MODULE_ID = "yze-combat-permission-fix";
 const escape = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -10,6 +11,7 @@ const statusCosts = { free: [], fast: ["fastAction"], slow: ["slowAction"], both
 export function createEquipmentPanel({ operations, onLayout, onControlsChange }) {
   const element = document.createElement("div");
   element.className = "yze-equipment";
+  element.dataset.equipmentTooltipTheme = "dark";
   // Native details.toggle does not bubble. Slot settings can increase the
   // height too, so capture every disclosure and clamp after its layout change.
   element.addEventListener("toggle", () => onLayout?.(), true);
@@ -17,11 +19,12 @@ export function createEquipmentPanel({ operations, onLayout, onControlsChange })
   let command = null, cost = "", revision = null, roundKey = "", message = "", busy = false, signature = "";
   let open = Boolean(game.settings.get(MODULE_ID, "equipmentOpen"));
   let externalHands = false;
+  let inventoryOpen = false, fromInventory = false;
 
-  const name = id => state?.inventory?.find(item => item.id === id)?.name ??
+  const name = id => state?.handInventory?.find(item => item.id === id)?.name ?? state?.inventory?.find(item => item.id === id)?.name ??
     state?.slots?.find(slot => slot.itemId === id)?.item?.name ??
     Object.values(state?.heldItems ?? {}).find(item => item?.id === id)?.name ?? "Свободна";
-  const item = id => state?.inventory?.find(item => item.id === id) ??
+  const item = id => state?.handInventory?.find(item => item.id === id) ?? state?.inventory?.find(item => item.id === id) ??
     state?.slots?.find(slot => slot.itemId === id)?.item ?? Object.values(state?.heldItems ?? {}).find(item => item?.id === id);
   const epoch = () => combat?.started ? { id: combat.id, round: combat.round } : null;
   const canPay = value => statusCosts[value]?.every(status => !hasActionStatus(actor, status));
@@ -33,7 +36,7 @@ export function createEquipmentPanel({ operations, onLayout, onControlsChange })
     catch (error) { return { changed: false, error: error.message }; }
   }
 
-  function reset() { selected = null; slotIndex = null; command = null; cost = ""; message = ""; }
+  function reset() { selected = null; slotIndex = null; command = null; cost = ""; message = ""; fromInventory = false; }
   function controls() {
     const available = Boolean(actor && state && supportsEquipmentControls());
     const operation = available ? readEquipmentOperation(actor) : null;
@@ -83,8 +86,8 @@ export function createEquipmentPanel({ operations, onLayout, onControlsChange })
     if (selected || command?.type === "swapHands") {
       const heldHand = state.hands.left === selected ? "left" : state.hands.right === selected ? "right" : null;
       const selectedItem = item(selected);
-      const canHold = selectedItem && (state.slots.some(s => s.itemId === selected && s.canHold) || state.inventory.some(i => i.id === selected) && heldHand);
-      menu = `<div class="yze-equipment__menu"><div class="yze-equipment__menu-head"><strong>${escape(command?.type === "swapHands" ? "Поменять руки" : name(selected))}</strong>${selected ? '<button type="button" data-open-item>Открыть</button>' : ""}<button type="button" data-close aria-label="Закрыть меню предмета">×</button></div>
+      const canHold = selectedItem && (fromInventory && state.handInventory?.some(i => i.id === selected) || state.slots.some(s => s.itemId === selected && s.canHold) || state.inventory.some(i => i.id === selected) && heldHand);
+      menu = `<div class="yze-equipment__menu"><div class="yze-equipment__menu-head"><strong>${escape(command?.type === "swapHands" ? "Поменять руки" : name(selected))}</strong>${selected ? '<button type="button" data-open-item>Открыть</button><button type="button" data-post-item title="Отправить предмет в чат">В чат</button>' : ""}<button type="button" data-close aria-label="Закрыть меню предмета">×</button></div>
         ${command?.type === "swapHands" ? "" : `<div class="yze-equipment__commands">${[["left", "Левая"], ["right", "Правая"], ["both", "Обе"], ["stow", "Убрать"]].map(([hand, label]) => `<button type="button" data-grip="${hand}" aria-label="${hand === "stow" ? "Убрать из рук" : `Взять: ${label}`}" aria-pressed="${command?.hand === hand || hand === "stow" && command?.type === "stow"}" ${blocked || (hand === "stow" ? !heldHand : !canHold) ? "disabled" : ""}>${label}</button>`).join("")}</div>`}
         <div class="yze-equipment__preview" aria-live="polite">${escape(previewText)}</div>
         <label class="yze-equipment__price-label" for="yze-equipment-price">${combat?.started ? "Цена операции" : "Вне боя · без траты"}</label><div class="yze-equipment__price-row">${combat?.started ? `<select id="yze-equipment-price" data-cost aria-label="Цена операции" ${!command || blocked || !transition?.changed ? "disabled" : ""}><option value="">Выбрать…</option>${Object.entries(costs).map(([value, label]) => `<option value="${value}" ${cost === value ? "selected" : ""} ${!canPay(value) ? "disabled" : ""}>${label}${canPay(value) ? "" : " — потрачено"}</option>`).join("")}</select>` : ""}<button type="button" data-apply ${blocked || !transition?.changed || combat?.started && (!cost || !canPay(cost)) ? "disabled" : ""}>Применить</button></div></div>`;
@@ -94,11 +97,16 @@ export function createEquipmentPanel({ operations, onLayout, onControlsChange })
       ${selectedSlot.available ? `<label>Предмет<select data-assign-item aria-label="Предмет для слота"><option value="">Выбрать…</option>${state.inventory.map(i => `<option value="${escape(i.id)}">${escape(i.name)}</option>`).join("")}</select></label><button type="button" data-assign ${blocked ? "disabled" : ""}>Назначить</button>` : ""}
       <label>Переставить в<select data-move-to aria-label="Целевой слот">${state.slots.filter(s => s.available && s.index !== slotIndex).map(s => `<option value="${s.index}">${s.index + 1}: ${escape(s.item?.name ?? "Пусто")}</option>`).join("")}</select></label><button type="button" data-move ${blocked || !state.slots.some(s => s.available && s.index !== slotIndex) ? "disabled" : ""}>Переставить</button>
       <button type="button" data-clear-slot ${blocked || !selectedSlot.itemId ? "disabled" : ""}>Освободить слот</button></details>` : "";
-    element.innerHTML = `${externalHands ? "" : `<div class="yze-equipment__hands-block"><div class="yze-equipment__hands">${both ? handButton("both") : handButton("left") + handButton("right")}</div></div>`}${menu}
+    const inventory = getQuickAccessEquipmentApi()?.capabilities?.inventoryHands && Array.isArray(state.handInventory)
+      ? `<details class="yze-equipment__inventory" ${inventoryOpen ? "open" : ""}><summary>Взять из инвентаря</summary><label>Оружие и снаряжение<select data-hand-inventory aria-label="Взять предмет из инвентаря" ${blocked ? "disabled" : ""}><option value="">Выбрать предмет…</option>${[["weapon", "Оружие"], ["gear", "Снаряжение"]].map(([type, label]) => `<optgroup label="${label}">${state.handInventory.filter(i => i.type === type).map(i => `<option value="${escape(i.id)}" ${fromInventory && selected === i.id ? "selected" : ""}>${escape(i.name)}</option>`).join("")}</optgroup>`).join("")}</select></label></details>` : "";
+    element.innerHTML = `${externalHands ? "" : `<div class="yze-equipment__hands-block"><div class="yze-equipment__hands">${both ? handButton("both") : handButton("left") + handButton("right")}</div></div>`}${inventory}${menu}
       <details class="yze-equipment__slots" ${open ? "open" : ""}><summary>Быстрый доступ · ${state.capacity} слотов${state.slots.length > state.capacity ? " · есть избыток" : ""}</summary><div class="yze-equipment__grid" style="--equipment-columns:${Math.max(1, Math.ceil(Math.min(state.slots.length, 10) / 2))}">${slots || '<span class="yze-equipment__empty">Нет доступных слотов</span>'}</div>${state.slots.length > 10 ? `<p>Ещё ${state.slots.length - 10} сохранённых привязок. Настройте их на листе.</p>` : ""}${settings}</details>
       ${pending ? `<div class="yze-equipment__recovery" role="alert">${operation.phase === "undoing" ? "Отмена ожидает завершения" : "Операция ожидает завершения"}<div><button type="button" data-resume ${busy ? "disabled" : ""}>Продолжить</button><button type="button" data-cancel ${busy ? "disabled" : ""}>Отменить операцию</button></div></div>` : ""}
       <div class="yze-equipment__message" ${message ? 'role="alert"' : 'aria-live="polite"'}>${escape(busy ? "Применение…" : message)}</div>`;
     const details = element.querySelector(".yze-equipment__slots");
+    element.querySelector(".yze-equipment__inventory")?.addEventListener("toggle", event => {
+      if (event.currentTarget.isConnected) inventoryOpen = event.currentTarget.open;
+    });
     details.addEventListener("toggle", () => {
       if (!details.isConnected || open === details.open) return;
       open = details.open;
@@ -131,6 +139,11 @@ export function createEquipmentPanel({ operations, onLayout, onControlsChange })
   }
 
   element.addEventListener("change", event => {
+    if (event.target.matches("[data-hand-inventory]")) {
+      const value = event.target.value;
+      if (!state.handInventory?.some(i => i.id === value)) return;
+      reset(); selected = value; fromInventory = true; inventoryOpen = true; render(); return;
+    }
     if (!event.target.matches("[data-cost]")) return;
     cost = event.target.value;
     const button = element.querySelector("[data-apply]");
@@ -143,13 +156,17 @@ export function createEquipmentPanel({ operations, onLayout, onControlsChange })
     if (button.hasAttribute("data-slot") || button.hasAttribute("data-select-item")) {
       selected = button.dataset.itemId || button.dataset.selectItem || null;
       slotIndex = button.hasAttribute("data-slot") ? Number(button.dataset.slot) : null;
+      fromInventory = !button.hasAttribute("data-slot") && Boolean(state.handInventory?.some(i => i.id === selected));
       command = null; cost = "";
     } else if (button.hasAttribute("data-grip")) {
       const hand = button.dataset.grip;
-      command = hand === "stow" ? { type: "stow", hand: state.hands.left === selected ? "left" : "right" } : { type: "hold", itemId: selected, hand };
+      command = hand === "stow" ? { type: "stow", hand: state.hands.left === selected ? "left" : "right" } : { type: fromInventory ? "holdInventory" : "hold", itemId: selected, hand };
       cost = "";
     } else if (button.hasAttribute("data-open-item")) {
       actor.items.get(selected)?.sheet?.render(true); return;
+    } else if (button.hasAttribute("data-post-item")) {
+      const target = actor;
+      void postItemToChat(target, selected).catch(error => {if (actor?.uuid === target.uuid) {message = error.message; render();}}); return;
     } else if (button.hasAttribute("data-close")) reset();
     else if (button.hasAttribute("data-apply")) {
       const transition = preview();
@@ -177,8 +194,8 @@ export function createEquipmentPanel({ operations, onLayout, onControlsChange })
 
   function update(nextActor, nextState, nextCombat) {
     const nextRoundKey = JSON.stringify(nextCombat?.started ? [nextCombat.id, nextCombat.round] : null);
-    if (actor?.uuid !== nextActor?.uuid) { reset(); revision = null; }
-    else if ((nextState?.revision !== revision || nextRoundKey !== roundKey) && !busy && !operations.isBusy(nextActor?.uuid)) { command = null; cost = ""; selected = null; slotIndex = null; }
+    if (actor?.uuid !== nextActor?.uuid) { reset(); revision = null; inventoryOpen = false; }
+    else if ((nextState?.revision !== revision || nextRoundKey !== roundKey) && !busy && !operations.isBusy(nextActor?.uuid)) { command = null; cost = ""; selected = null; slotIndex = null; fromInventory = false; }
     actor = nextActor; state = nextState; combat = nextCombat; revision = state?.revision;
     roundKey = nextRoundKey;
     const nextSignature = JSON.stringify([actor?.uuid, state, epoch(), readEquipmentOperation(actor), hasPendingWeaponOperation(actor), actor && [hasActionStatus(actor, "fastAction"), hasActionStatus(actor, "slowAction")], operations.isBusy(actor?.uuid)]);
@@ -187,7 +204,7 @@ export function createEquipmentPanel({ operations, onLayout, onControlsChange })
   }
   function selectItem(itemId) {
     if (!actor?.items?.get(itemId) || busy) return false;
-    reset(); selected = itemId; render(); return true;
+    reset(); selected = itemId; fromInventory = Boolean(state?.handInventory?.some(i => i.id === itemId)); render(); return true;
   }
   function setExternalHands(value) { if (externalHands !== value) {externalHands = value; render();} }
   return { element, update, swapHands, undoLast, selectItem, setExternalHands, get busy() { return busy; } };

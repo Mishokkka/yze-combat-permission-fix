@@ -1,6 +1,6 @@
 # YZE Combat: Permission Fix + Action Widget
 
-Version 1.6.1
+Version 1.7.0
 
 Target environment:
 
@@ -52,13 +52,12 @@ YZE Combat's **Slow & Fast Actions** mode is enabled.
 
 The widget does not require the Combat Tracker to be open.
 
-### Warm Tactical appearance
+### Fixed dark appearance
 
 The action widget, slots, combat reference, weapon ribbon and operation forms
-share the **Тёплый тактический** style: opaque warm surfaces, bronze accents,
-5 px corners and compact 6 px spacing. Foundry's client light/dark appearance
-switches the palette, including native cost dropdowns; without a theme class
-the dark palette is used. Main text is 13 px, secondary labels are 11 px.
+share one fixed **dark** palette: opaque backgrounds, explicit foreground/field/option
+colors, bronze accents, 5 px corners and compact spacing. Foundry's client theme
+does not change these colors. The widget uses Arial at 12 px, secondary labels at 11 px.
 Available actions and held slots have an accent border. Spent actions remain
 readable, with a crossed-out title and their explicit status. Weapon labels,
 values, ammunition, traits and operation controls remain separate groups.
@@ -191,6 +190,15 @@ game.modules.get("yze-combat-permission-fix").api
 
 ## Changelog
 
+### 1.7.0
+
+- Use one explicit dark theme, including text/fields/options, independently of Foundry's sheet theme and font.
+- Compact the weapon ribbon to 460 px with inline labeled stats and hover/focus property rules, reusing Quick Access's enriched tooltips and the FL Firearms rule journal.
+- Open native attacks directly; action marks are manual. Keep reload prices/progress and the existing permission fix unchanged.
+- Send held/selected Items through FBL's native sendToChat, including its visibility flags and roll mode.
+- Add Quick Access 1.7.33 inventory grips for carried weapon/gear Items, without the quick-slot weight limit; preserve slots, payment, receipts and undo.
+- Hide/restore the weapon ribbon independently via its close control and the main header's weapon button; persist the preference per client.
+
 ### 1.6.1
 
 - Apply the selected Warm Tactical style to both panels, slots, reference and operation forms through a shared scoped palette.
@@ -241,13 +249,13 @@ game.modules.get("yze-combat-permission-fix").api
 - Correct the equipment example to select an eligible nonempty slot.
 - Add 9 behavioral permission/round-transition regressions (15 tests total).
 
-## Weapon ribbon and reload progress (1.5.0)
+## Weapon ribbon and reload progress (1.7.0)
 
-With **Quick Access 1.7.30+**, held Items move into a separate compact ribbon. Identity/grip, attack stats, ammo, traits and commands have distinct groups. Click a trait for its description, the Item name for sheet/grip controls, and +N for more traits. Absent data is hidden.
+With **Quick Access 1.7.30+**, held Items move into a separate compact ribbon. Identity/grip, inline attack stats, ammo, traits and commands have distinct groups. With **Quick Access 1.7.33+**, hover or focus a property for its enriched rule tooltip; the Item name shows its full tooltip and opens the sheet on click. Properties without available rule text stay plain labels. The same Rich Info Tooltips journal supplies FL Firearms descriptions; private journal/page text is excluded. Other Features is enriched through Quick Access rather than displayed as raw @INFO text. The grip button opens hand controls; **В чат** calls the native Item.sendToChat, preserving its field visibility and roll mode.
 
-Client setting **Weapon ribbon placement** chooses floating (default), side or below. Drag the floating header to save position. Full main collapse hides weapons unless **Закрепить** is explicitly enabled. Narrow screens wrap groups and scroll details internally.
+Client setting **Weapon ribbon placement** chooses floating (default), side or below. Drag the floating header to save position. Full main collapse hides weapons unless the pin control is enabled. The ribbon's × hides it independently; the weapon button in the main header restores it. This visibility preference persists per client. Narrow screens wrap groups and scroll reload details internally.
 
-**Атака** requires an explicit price in combat and opens the native dialog, enhanced by RDP when active. Opening/cancelling before submit is free. Confirmation reserves native YZE effects once and invokes the existing system/FL Firearms backend. Push/duplicate submit never charge again; no extra ammo deduction is added. See [ROLL_INTEGRATION.md](ROLL_INTEGRATION.md).
+**Атака** immediately opens the native dialog, enhanced by RDP when active. Mark Fast/Slow manually in the widget. No intermediate attack panel, action reservation or extra ammo deduction is added; the system/FL Firearms backend owns the roll. The former paid-attack protocol remains available for existing journals/integrations. See [ROLL_INTEGRATION.md](ROLL_INTEGRATION.md).
 
 **Зарядить / Дозарядить** opens current progress, total, progress per action and steps/seconds. Account for abilities manually: e.g. 0/4 with 2 per operation advances to 2/4, then 4/4. Each step has its own selected price; progress survives rounds/reloads. Seconds are a manual counter, not a timer.
 

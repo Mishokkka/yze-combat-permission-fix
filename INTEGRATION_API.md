@@ -1,5 +1,14 @@
 # Action widget integration API
 
+In 1.7.0, weapon attacks call `rolls.open` directly and action marks are manual.
+The previous paid-attack journal protocol remains compatible with existing
+operations; reloads and physical equipment operations retain explicit costs.
+Quick Access 1.7.33 enables `handInventory` selection via `inventoryHands` and
+rich property tooltips via `equipmentFeatureTooltips`. No private module imports
+are used. Client-only `weaponRibbonVisible` independently hides/restores the
+ribbon and does not change Actor equipment. Hidden ribbons fall back to compact
+hand buttons in the main widget. The only palette is explicitly dark.
+
 Available in **1.2.0** after Foundry `ready`:
 
 ```js
@@ -45,6 +54,7 @@ The comparison token is local validation, not a server-side lock across clients.
 
 Supported Quick Access commands:
 
+- `{ type: "holdInventory", itemId, hand: "left" | "right" | "both" }` with QA 1.7.33 `inventoryHands`: carried weapon/gear, including unslotted heavy Items. Uses the same paid equipment channel and receipt/undo guards in the built-in UI.
 - `{ type: "hold", itemId, hand: "left" | "right" | "both" }`.
 - `{ type: "stow", hand: "left" | "right" | "both" }`.
 - `{ type: "swapHands" }`.

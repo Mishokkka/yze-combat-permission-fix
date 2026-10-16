@@ -147,7 +147,8 @@ export function createEquipmentOperations({ getApi = getQuickAccessEquipmentApi,
     if (typeof payload.id !== "string" || !/^[a-zA-Z0-9_-]{1,56}$/.test(payload.id)) throw new Error("Некорректный идентификатор операции.");
     if (payload.kind === "start") {
       const command = Object.fromEntries(["type", "hand", "itemId", "index", "from", "to"].filter(key => payload.command?.[key] !== undefined).map(key => [key, payload.command[key]]));
-      if (!["hold", "stow", "swapHands", ...FREE_COMMANDS].includes(command.type)) throw new Error("Некорректная команда экипировки.");
+      if (!["hold", "holdInventory", "stow", "swapHands", ...FREE_COMMANDS].includes(command.type)) throw new Error("Некорректная команда экипировки.");
+      if (command.type === "holdInventory" && !api.capabilities?.inventoryHands) throw new Error("Для выбора из инвентаря обновите Quick Access до 1.7.33.");
       if (!Object.hasOwn(COSTS, payload.cost) || (FREE_COMMANDS.has(command.type) && payload.cost !== "free")) throw new Error("Выберите стоимость операции.");
       const fingerprint = JSON.stringify([command, payload.cost, payload.combat ?? null]);
       if (operation?.id === payload.id) {
