@@ -1,5 +1,25 @@
 # Action widget integration API
 
+## GM summary (1.8.0)
+
+On a GM client, after the supported YZE Combat patch is initialized,
+`game.modules.get("yze-combat-permission-fix").api.gmSummary` exposes
+`show()`, `hide()`, `toggle()`, and `refresh()`. It is `null` on player clients or
+when the compatibility patch is disabled. Visibility methods return the client
+setting write Promise; `refresh()` coalesces display updates to an animation frame.
+`destroy()` is for lifecycle cleanup and is called on shutdown.
+
+Client-only preferences are `gmSummaryVisible` (default false),
+`gmSummaryCollapsed` (default false), and `gmSummaryPosition` (`{left, top}`).
+The GM summary reads `getEquipmentState(actor)` for every displayed Actor and,
+when available, `getHeldItemPresentation(actor)` for magazine data. It reads its
+own `weaponReload` records for unfinished progress and native action statuses.
+No additional socket messages or gameplay writes are introduced. Membership is
+based on connected non-GM users and their assigned/owned combat characters, not
+the GM's selection or another client's current widget selection.
+
+## Player widget
+
 In 1.7.0, weapon attacks call `rolls.open` directly and action marks are manual.
 The previous paid-attack journal protocol remains compatible with existing
 operations; reloads and physical equipment operations retain explicit costs.
