@@ -6,6 +6,7 @@ import { createRollBridge } from "./roll-bridge.js";
 import { createWeaponOperations } from "./weapon-operations.js";
 import { createAttackController } from "./attack-controller.js";
 import { createWeaponRibbon } from "./weapon-ribbon.js";
+import { addGMSummaryControl, createGMSummary, registerGMSummarySettings } from "./gm-summary.js";
 
 const MODULE_ID = "yze-combat-permission-fix";
 const TARGET_MODULE_ID = "yze-combat";
@@ -30,6 +31,7 @@ let widgetMutationBusy = false;
 let equipmentOperations = null;
 let weaponOperations = null;
 let attacks = null;
+let gmSummary = null;
 const equipmentPanels = new WeakMap();
 const weaponRibbons = new WeakMap();
 
@@ -799,6 +801,8 @@ function installActionWidgetHooks() {
 /* ========================================================================== */
 
 Hooks.once("init", () => {
+  registerGMSummarySettings(() => gmSummary?.refresh());
+  Hooks.on("getSceneControlButtons", controls => addGMSummaryControl(controls, () => gmSummary?.toggle()));
   game.settings.register(MODULE_ID, WIDGET_POSITION_SETTING, {
     scope: "client",
     config: false,
@@ -852,6 +856,7 @@ Hooks.once("ready", () => {
     Hooks.on("fblQuickAccess.apiReady", () => {equipmentOperations.register(); weaponOperations.register();});
     installActionWidgetHooks();
     refreshActionWidget();
+    if (game.user.isGM) gmSummary = createGMSummary();
     log(`Applied for yze-combat ${TARGET_VERSION}.`);
   }
   catch (error) {
@@ -861,6 +866,7 @@ Hooks.once("ready", () => {
 });
 
 Hooks.once("shutdown", () => {
+  gmSummary?.destroy();
   for (const pending of pendingRoundRequests.values()) {
     window.clearTimeout(pending.timeout);
     pending.resolve(null);
@@ -883,6 +889,7 @@ Hooks.once("ready", () => {
       quickAccess,
       rolls,
       get weapons() {return weaponOperations;},
+      get gmSummary() {return gmSummary;},
     });
     Hooks.callAll("yzeCombatPermissionFix.apiReady", module.api);
   }

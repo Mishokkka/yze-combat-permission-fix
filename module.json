@@ -1,8 +1,8 @@
 {
   "id": "yze-combat-permission-fix",
   "title": "YZE Combat: Permission Fix + Action Widget",
-  "description": "Compatibility patch for Year Zero Engine: Combat 1.6.1 on Foundry VTT v13. Fixes player round-transition permissions, prevents non-GM group-maintenance writes, and adds a draggable fast/slow action widget for players.",
-  "version": "1.7.0",
+  "description": "Compatibility patch for Year Zero Engine: Combat 1.6.1 on Foundry VTT v13. Fixes player round-transition permissions, adds player action/equipment widgets and a compact GM party summary.",
+  "version": "1.8.0",
   "compatibility": {
     "minimum": "13.341",
     "verified": "13.351",
@@ -19,7 +19,8 @@
   "styles": [
     "styles/widget-theme.css",
     "styles/action-widget.css",
-    "styles/weapon-ribbon.css"
+    "styles/weapon-ribbon.css",
+    "styles/gm-summary.css"
   ],
   "socket": true,
   "relationships": {

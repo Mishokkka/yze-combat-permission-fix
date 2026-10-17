@@ -1,6 +1,6 @@
 # YZE Combat: Permission Fix + Action Widget
 
-Version 1.7.0
+Version 1.8.0
 
 Target environment:
 
@@ -54,7 +54,7 @@ The widget does not require the Combat Tracker to be open.
 
 ### Fixed dark appearance
 
-The action widget, slots, combat reference, weapon ribbon and operation forms
+The action widget, slots, combat reference, weapon ribbon, GM summary and operation forms
 share one fixed **dark** palette: opaque backgrounds, explicit foreground/field/option
 colors, bronze accents, 5 px corners and compact spacing. Foundry's client theme
 does not change these colors. The widget uses Arial at 12 px, secondary labels at 11 px.
@@ -64,8 +64,42 @@ values, ammunition, traits and operation controls remain separate groups.
 Primary confirmation buttons share an accent fill; manual progress correction
 and recovery stay distinct. Keyboard focus is visible and touch controls keep
 at least 44 px targets. Placement, pinning and collapse settings are preserved.
-The styling is scoped to the two widget roots and does not restyle Item sheets,
+The styling is scoped to the three widget roots and does not restyle Item sheets,
 the native roll dialog, or the Quick Access character sheet.
+
+## GM party summary (1.8.0)
+
+The GM has a separate, read-only **Сводка группы** table. Open or hide it with
+the **group icon in Token Controls** (the left scene toolbar), or the client
+setting **Сводка группы для ГМа**. It starts hidden. Drag the title bar to move
+it; the chevron collapses it and × hides it. Visibility, collapse and position
+are saved independently of the player's widget, per browser/client.
+
+- Rows include character combatants owned by connected non-GM users, plus their
+  assigned characters if not represented in the selected combat. Outside an
+  encounter, assigned characters are used. A connected user without an assigned
+  character or owned character combatant gets **Персонаж не назначен**.
+- In combat, read the actual combatant Actor, including unlinked token Actors;
+  never substitute the base Actor or guess another client's selected token.
+  Shared Actors appear once; distinct synthetic Actors remain separate. Turn and
+  initiative changes do not reorder the table; the current row is highlighted.
+- Show **Л / П / 2Р**, held Item names, **Б / О** with available/spent marks,
+  optional FL Firearms magazine counts and unfinished reload/top-off progress.
+  Empty hands remain neutral. Missing/unreadable Quick Access shows
+  **Нет данных о руках**, not free hands. Native action marks still work.
+- Click a character or Item name to open its native sheet. The summary itself
+  never changes hands, action effects, ammunition, combat or reload progress.
+  Action marks are informational; they do not determine whether a proposed
+  action is legal or affordable. Outside combat, action marks are hidden.
+- Membership, document effects, equipment, ammunition and reload progress update
+  through Foundry/Quick Access/FL Firearms hooks, even with player sheets closed.
+  The fixed dark table is 420 px wide, fits narrow screens, and scrolls internally
+  for larger groups. Pending operations and characters unable to act are labelled.
+
+After upgrading, restart Foundry and reload connected clients so the new manifest
+stylesheet is loaded. Quick in-world check: connect a GM and player, open the
+summary, change hands/action marks as the player, then hide/reopen the summary.
+Repeat with an unlinked token, a magazine change and a player disconnect.
 
 ## Combat reference
 
@@ -136,7 +170,7 @@ See [ROLL_INTEGRATION.md](ROLL_INTEGRATION.md) for the researched contract and n
 
 ## Verification
 
-`npm test` runs 36 regressions, including the unchanged round permission fix,
+`npm test` runs 79 regressions, including the unchanged round permission fix,
 partial hand/effect acknowledgements, payment, safe undo, concurrency and GM
 handover. The companion Quick Access suite passes 237 tests.
 
@@ -149,6 +183,14 @@ and transport. It checks desktop/narrow/touch layout, mandatory cost selection,
 payment/recovery/undo, slot setup, Actor guards, whole-widget persistence, header
 tools, contrasting dropdown options, memo and optional integration.
 A live GM/player session remains the final in-world acceptance check.
+
+`node dev-tests/browser-gm-summary.mjs` uses the same `QA_SOURCE`,
+`PLAYWRIGHT_MODULE`, `CHROME_PATH` and optional `FOUNDRY_CSS`/`SCREENSHOT_DIR`.
+It imports the real Quick Access equipment/presentation readers, with simulated
+Foundry Documents and the public firearm data provider. It checks membership,
+token identity, live updates, sheets, read-only behaviour, persistence, missing
+integrations, escaping, both Foundry themes and narrow/touch layout. On Windows,
+an absolute `PLAYWRIGHT_MODULE` should be a `file:///C:/.../index.mjs` URL.
 
 The action buttons, permission fixes and reference work without Quick Access or with older
 versions. Neither module requires the other.
@@ -189,6 +231,17 @@ game.modules.get("yze-combat-permission-fix").api
 `applied` should be `true`.
 
 ## Changelog
+
+### 1.8.0
+
+- Add an optional GM-only party summary table with a Token Controls button,
+  independent hide/collapse/position preferences and native sheet links.
+- Read connected players' actual combatant Actors, hands, native action marks,
+  firearm magazines and reload progress without changing gameplay data.
+- Handle shared ownership, unlinked tokens, disconnects, absent equipment APIs
+  and out-of-combat characters explicitly; preserve row order across turns.
+- Verify the new summary with eight model/control regressions and a browser
+  harness using the real Quick Access readers and optional Foundry styles.
 
 ### 1.7.0
 
