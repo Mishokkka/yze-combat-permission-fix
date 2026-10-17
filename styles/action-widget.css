@@ -6,20 +6,20 @@
 #yze-combat-permission-fix-action-widget[hidden],
 #yze-combat-permission-fix-action-widget [hidden] { display: none !important; }
 #yze-combat-permission-fix-action-widget .yze-action-widget__handle {
-  flex: 0 0 auto; height: 36px; display: flex; align-items: center; gap: 4px; padding: 3px var(--yze-space);
+  flex: 0 0 auto; height: 30px; display: flex; align-items: center; gap: 3px; padding: 2px var(--yze-space);
   background: var(--yze-raised); border-bottom: 1px solid var(--yze-line); cursor: grab; touch-action: none;
 }
 #yze-combat-permission-fix-action-widget .yze-action-widget__handle.is-dragging { cursor: grabbing; }
 #yze-combat-permission-fix-action-widget .yze-action-widget__handle > i { color: var(--yze-quiet); flex: 0 0 auto; font-size: 11px; }
 #yze-combat-permission-fix-action-widget .yze-action-widget__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-#yze-combat-permission-fix-action-widget .yze-action-widget__tool { flex: 0 0 28px; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; font-size: 17px; }
+#yze-combat-permission-fix-action-widget .yze-action-widget__tool { flex: 0 0 24px; min-height: 24px; width: 24px; height: 24px; padding: 0; display: grid; place-items: center; font-size: 16px; }
 #yze-combat-permission-fix-action-widget .yze-action-widget__tool.has-pending-operation { color: var(--yze-accent); border-color: var(--yze-accent); }
 #yze-combat-permission-fix-action-widget.is-collapsed .yze-action-widget__handle { border-bottom: 0; }
 #yze-combat-permission-fix-action-widget .yze-action-widget__actions { flex: 0 0 auto; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 5px; padding: var(--yze-space); }
-#yze-combat-permission-fix-action-widget .yze-action-widget__action { height: 42px; display: flex; align-items: center; gap: 5px; text-align: left; transition: background 90ms ease, border-color 90ms ease; }
+#yze-combat-permission-fix-action-widget .yze-action-widget__action { height: 38px; display: flex; align-items: center; gap: 5px; text-align: left; transition: background 90ms ease, border-color 90ms ease; }
 #yze-combat-permission-fix-action-widget .yze-action-widget__action.is-available { border-color: var(--yze-accent); }
 #yze-combat-permission-fix-action-widget .yze-action-widget__action.is-spent { color: var(--yze-quiet); }
-#yze-combat-permission-fix-action-widget .is-spent .yze-action-widget__label { text-decoration: line-through; }
+#yze-combat-permission-fix-action-widget .is-spent .yze-action-widget__label { text-decoration: line-through; color: var(--yze-quiet); }
 #yze-combat-permission-fix-action-widget .yze-action-widget__icon { width: 22px; height: 22px; display: grid; place-items: center; flex: 0 0 22px; }
 #yze-combat-permission-fix-action-widget .yze-action-widget__icon img { width: 22px; height: 22px; object-fit: contain; border: 0; }
 #yze-combat-permission-fix-action-widget .is-spent .yze-action-widget__icon img { filter: grayscale(1); }
@@ -43,6 +43,9 @@
 #yze-combat-permission-fix-action-widget .yze-equipment__menu,
 #yze-combat-permission-fix-action-widget .yze-equipment__recovery { margin: 0 var(--yze-space) var(--yze-space); }
 #yze-combat-permission-fix-action-widget .yze-equipment__slots { border-top: 1px solid var(--yze-line); }
+#yze-combat-permission-fix-action-widget .yze-equipment__inventory { margin: 0 var(--yze-space) var(--yze-space); border-top: 1px solid var(--yze-line); }
+#yze-combat-permission-fix-action-widget .yze-equipment__inventory label { display: block; font-size: 11px; }
+#yze-combat-permission-fix-action-widget .yze-equipment__inventory select { margin: 3px 0; }
 #yze-combat-permission-fix-action-widget .yze-equipment__grid { display: grid; grid-template-columns: repeat(var(--equipment-columns),minmax(0,1fr)); gap: 4px; }
 #yze-combat-permission-fix-action-widget .yze-equipment__slot { display: flex; flex-direction: column; justify-content: center; gap: 2px; height: 44px; padding: 2px 3px; }
 #yze-combat-permission-fix-action-widget .yze-equipment__slot-top { display: flex; align-items: center; justify-content: space-between; gap: 2px; width: 100%; }

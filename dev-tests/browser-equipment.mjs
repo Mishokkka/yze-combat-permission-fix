@@ -31,6 +31,7 @@ game.system={id:'forbidden-lands'};
 window.getDocumentClass=()=>({fromStatusEffect:async id=>({toObject:()=>({statuses:[id],name:id,flags:{}})})});
 function makeActor(uuid){const flags={slots:['sword','shield','torch','bow',null,null,null,null]};return {documentName:'Actor',type:'character',uuid,id:uuid,name:'Игрок',isOwner:true,system:{attribute:{agility:{max:8}}},effects:[],statuses:new Set(),items:new Map(['sword','shield','torch','bow'].map((id,index)=>[id,{id,uuid:uuid+'.Item.'+id,name:['Меч','Щит','Факел','Лук'][index],img:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"><rect width="22" height="22" fill="gray"/></svg>',type:'weapon',system:{weight:'normal'},sheet:{render:()=>window.openedItem=id}}])),testUserPermission:()=>true,getFlag:(_m,k)=>flags[k],update:async function(data){if(this.cancelNext){this.cancelNext=false;return undefined;}for(const [p,v]of Object.entries(data)){const raw=p.split('.').at(-1),key=raw.replace(/^==/,'');if(raw.startsWith('==')||!v||typeof v!=='object'||Array.isArray(v))flags[key]=structuredClone(v);else flags[key]={...flags[key],...structuredClone(v)};}Hooks.callAll('updateActor',this,data,{});return this;},refreshStatuses(){this.statuses=new Set(this.effects.flatMap(e=>[...e.statuses]));},async createEmbeddedDocuments(_type,data){if(this.failFee&&data[0].statuses.includes(this.failFee))throw new Error('fee unavailable');const created=data.map(d=>({...structuredClone(d),id:'effect'+(++sequence),parent:this,statuses:new Set(d.statuses),getFlag(m,k){return this.flags?.[m]?.[k];}}));this.effects.push(...created);this.refreshStatuses();for(const e of created)Hooks.callAll('createActiveEffect',e);return created;},async deleteEmbeddedDocuments(_type,ids){this.effects=this.effects.filter(e=>!ids.includes(e.id));this.refreshStatuses();Hooks.callAll('deleteActiveEffect',{parent:this});return ids;},async toggleStatusEffect(id,{active}){if(active)await this.createEmbeddedDocuments('ActiveEffect',[{statuses:[id],flags:{}}]);else await this.deleteEmbeddedDocuments('ActiveEffect',this.effects.filter(e=>e.statuses.has(id)).map(e=>e.id));}};}
 const actor=makeActor('Actor.pc'),other=makeActor('Scene.scene.Token.other.Actor.pc');
+for(const pc of [actor,other])for(const item of pc.items.values())item.sendToChat=async()=>{window.postedItem=item.id;};
 const combatants=[{actor,tokenId:'pc',name:'Игрок'},{actor:other,tokenId:'other',name:'Второй персонаж'}];
 game.combat={id:'combat',round:1,started:true,combatants,turns:combatants,turn:0,combatant:combatants[0]};game.combats=new Map([['combat',game.combat]]);
 window.canvas={tokens:{controlled:[]}};
@@ -42,7 +43,7 @@ const sheets=await import('/qa/scripts/equipment-sheet.js');Hooks.on('updateActo
 for(const pc of [actor,other]){const root=document.createElement('div');root.hidden=true;root.innerHTML='<div class="gear-tab"><section class="fblqa-panel"><div class="fblqa-slots"></div><input class="wallet-test" value="keep"></section></div>';document.body.append(root);pc.apps={test:{element:root}};pc.walletNode=root.querySelector('.wallet-test');}
 equipment.registerEquipmentHooks();
 const handlers=new Map();
-const api={capabilities:{equipment:true,equipmentControls:true},equipmentApiVersion:1,getEquipmentState:equipment.getEquipmentState,performEquipmentAction:equipment.performEquipmentAction,previewEquipmentAction:equipment.previewEquipmentAction,getEquipmentReceipt:equipment.getEquipmentReceipt,getQuickAccessSlots:slots.getStoredSlots,registerSocketHandler:(key,fn)=>handlers.set(key,fn),getActiveGM:()=>authority,executeAsActiveGM:(key,payload)=>handlers.get(key)(payload,{requestUser:player})};
+const api={capabilities:{equipment:true,equipmentControls:true,inventoryHands:true,equipmentFeatureTooltips:true},equipmentApiVersion:1,getEquipmentState:equipment.getEquipmentState,performEquipmentAction:equipment.performEquipmentAction,previewEquipmentAction:equipment.previewEquipmentAction,getEquipmentReceipt:equipment.getEquipmentReceipt,getQuickAccessSlots:slots.getStoredSlots,registerSocketHandler:(key,fn)=>handlers.set(key,fn),getActiveGM:()=>authority,executeAsActiveGM:(key,payload)=>handlers.get(key)(payload,{requestUser:player})};
 game.modules.set('fbl-quick-access',{active:true,api});
 api.setupEquipmentItemTooltips=tooltips.setupEquipmentItemTooltips;
 await import('/yze/scripts/main.js');Hooks.callAll('init');Hooks.callAll('ready');
@@ -214,6 +215,19 @@ try{
   await page.waitForFunction(()=>harness.actor.getFlag('', 'equipmentOperation')?.phase==='undone');
   assert.deepEqual(await page.evaluate(()=>harness.api.getEquipmentState(harness.actor).hands),handsBeforeSwap);
   assert.equal(await page.locator('.yze-equipment__message').textContent(),'');
+  // Heavy unslotted gear is selected from inventory without changing slots.
+  await page.evaluate(()=>{game.combat.started=true;harness.actor.items.set('pack',{id:'pack',name:'Тяжёлый рюкзак',type:'gear',system:{weight:'heavy'},sheet:{render(){}}});Hooks.callAll('updateActor',harness.actor,{},{});harness.module.api.refreshActionWidget();});
+  const slotsBeforeInventory=await page.evaluate(()=>harness.api.getQuickAccessSlots(harness.actor));
+  await page.locator('.yze-equipment__inventory summary').click();
+  await page.locator('[data-hand-inventory]').selectOption('pack');
+  await page.locator('[data-grip="both"]').click();await page.locator('[data-cost]').selectOption('fast');await page.locator('[data-apply]').click();
+  await page.waitForFunction(()=>harness.api.getEquipmentState(harness.actor).hands.left==='pack');
+  assert.deepEqual(await page.evaluate(()=>harness.api.getQuickAccessSlots(harness.actor)),slotsBeforeInventory);
+  assert.equal(await page.evaluate(()=>harness.actor.statuses.has('fastAction')),true);
+  await page.locator('[data-undo]').click();await page.waitForFunction(()=>harness.actor.getFlag('', 'equipmentOperation')?.phase==='undone');
+  assert.equal(await page.evaluate(()=>harness.actor.statuses.has('fastAction')),false);
+  await page.locator('[data-slot="2"]').click();await page.locator('[data-post-item]').click();
+  await page.waitForFunction(()=>window.postedItem==='torch');
   await page.evaluate(()=>{game.user.isGM=true;harness.module.api.refreshActionWidget();});await widget.waitFor({state:'detached'});
   assert.deepEqual(errors,[]);
   const touch=await browser.newPage({viewport:{width:320,height:480},hasTouch:true,isMobile:true});
